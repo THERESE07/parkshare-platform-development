@@ -325,26 +325,72 @@ function DriverReservationsPage() {
 }
 
 function OperatorPage() {
+  const user = getSignedInUser()
   const [lots, setLots] = useState<ParkingLot[]>([])
-  const [message, setMessage] = useState('Sign in with an OPERATOR account to load your parking lots.')
+  const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    if (!authToken.get()) return
-    const raw = window.sessionStorage.getItem('parkshare.authUser')
-    if (!raw) return
+  const [saving, setSaving] = useState(false)
+  const [name, setName] = useState('')
+  const [address, setAddress] = useState('')
+  const [city, setCity] = useState('Kigali')
+  const [description, setDescription] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [capacity, setCapacity] = useState('')
+
+  const allowed = Boolean(user?.roles.some(role => role.includes('OPERATOR') || role.includes('ADMIN')))
+  async function reloadLots() {
+    if (!user || !allowed) return
+    setLoading(true)
+    try { setLots(await parkingApi.listByOperator(user.userId)); setMessage('') }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Unable to load operator lots.') }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { void reloadLots() }, [])
+
+  async function createLot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!user || !allowed) return
+    setSaving(true); setMessage('')
     try {
-      const user = JSON.parse(raw) as AuthResponse
-      if (!user.roles.some(role => role.includes('OPERATOR') || role.includes('ADMIN'))) {
-        setMessage('Your account does not have the OPERATOR or ADMIN role.')
-        return
-      }
-      setLoading(true)
-      parkingApi.listByOperator(user.userId).then(data => { setLots(data); setMessage('') }).catch(cause => setMessage(cause instanceof Error ? cause.message : 'Unable to load operator lots.')).finally(() => setLoading(false))
-    } catch {
-      setMessage('Please sign in again to load your operator profile.')
-    }
-  }, [])
-  return <main className="mx-auto min-h-[calc(100vh-72px)] max-w-6xl px-4 py-10 sm:px-6"><Link to="/" className="text-sm font-semibold text-[#176b67]">← Back to ParkShare</Link><div className="mt-5"><h1 className="text-3xl font-bold">Operator workspace</h1><p className="mt-2 text-sm text-[#66777a]">Parking lots are loaded from the backend using the signed-in operator's user ID.</p></div>{loading && <p className="mt-6 text-sm text-[#66777a]">Loading your lots…</p>}{message && <div className="mt-6 rounded-2xl border border-[#dfe8e5] bg-white p-5 text-sm text-[#66777a]">{message} <Link to="/login" className="font-semibold text-[#176b67] underline">Sign in</Link></div>}<div className="mt-6 grid gap-4 sm:grid-cols-2">{lots.map(lot => <article key={lot.id} className="rounded-2xl border border-[#dfe8e5] bg-white p-5"><h2 className="font-bold">{lot.name}</h2><p className="mt-1 text-sm text-[#66777a]">{lot.address}, {lot.city}</p><p className="mt-3 text-sm">Status: <strong>{lot.status}</strong></p><p className="mt-1 text-sm">Capacity: <strong>{lot.totalCapacity ?? 'Not set'}</strong></p></article>)}</div></main>
+      const created = await parkingApi.create(user.userId, {
+        name: name.trim(), address: address.trim(), city: city.trim(),
+        description: description.trim() || undefined,
+        contactPhone: contactPhone.trim() || undefined,
+        totalCapacity: capacity ? Number(capacity) : undefined,
+        status: 'ACTIVE',
+      })
+      setLots(current => [created, ...current])
+      setName(''); setAddress(''); setDescription(''); setContactPhone(''); setCapacity('')
+      setMessage('Parking lot created successfully.')
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Unable to create parking lot.')
+    } finally { setSaving(false) }
+  }
+
+  return <main className="mx-auto min-h-[calc(100vh-72px)] max-w-6xl px-4 py-10 sm:px-6">
+    <Link to="/" className="text-sm font-semibold text-[#176b67]">← Back to ParkShare</Link>
+    <div className="mt-5"><h1 className="text-3xl font-bold">Operator workspace</h1><p className="mt-2 text-sm text-[#66777a]">Create a parking lot and manage the lots assigned to your operator account.</p></div>
+    {!user && <div className="mt-6 rounded-2xl border border-[#dfe8e5] bg-white p-5 text-sm text-[#66777a]">Sign in with an operator account to continue. <Link to="/login" className="font-semibold text-[#176b67] underline">Sign in</Link></div>}
+    {user && !allowed && <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Your account does not have the OPERATOR or ADMIN role. Please sign in with an authorized account.</div>}
+    {user && allowed && <div className="mt-7 grid items-start gap-6 lg:grid-cols-[.85fr_1.15fr]">
+      <form onSubmit={createLot} className="space-y-4 rounded-2xl border border-[#dfe8e5] bg-white p-5">
+        <h2 className="text-lg font-bold">Register a parking lot</h2>
+        <label className="block text-sm font-semibold">Parking lot name<input required value={name} onChange={e=>setName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal focus:border-[#176b67] focus:outline-none" /></label>
+        <label className="block text-sm font-semibold">Street address / area<input required value={address} onChange={e=>setAddress(e.target.value)} placeholder="e.g. KG 7 Ave, Kimihurura" className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal focus:border-[#176b67] focus:outline-none" /></label>
+        <label className="block text-sm font-semibold">City<input required value={city} onChange={e=>setCity(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal focus:border-[#176b67] focus:outline-none" /></label>
+        <label className="block text-sm font-semibold">Description <span className="font-normal text-[#66777a]">(optional)</span><textarea rows={3} value={description} onChange={e=>setDescription(e.target.value)} className="mt-1.5 w-full rounded-xl border border-[#d5e2df] p-3 font-normal focus:border-[#176b67] focus:outline-none" /></label>
+        <label className="block text-sm font-semibold">Contact phone <span className="font-normal text-[#66777a]">(optional)</span><input value={contactPhone} onChange={e=>setContactPhone(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal focus:border-[#176b67] focus:outline-none" /></label>
+        <label className="block text-sm font-semibold">Total capacity <span className="font-normal text-[#66777a]">(optional)</span><input type="number" min="1" step="1" value={capacity} onChange={e=>setCapacity(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal focus:border-[#176b67] focus:outline-none" /></label>
+        {message && <p role="status" className="rounded-xl bg-[#edf7f4] p-3 text-sm text-[#176b67]">{message}</p>}
+        <button disabled={saving} className="h-11 w-full rounded-xl bg-[#176b67] px-4 font-semibold text-white disabled:opacity-60">{saving ? 'Creating…' : 'Create parking lot'}</button>
+      </form>
+      <section><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold">Your parking lots</h2><span className="text-sm text-[#66777a]">{lots.length} total</span></div>
+        {loading && <p className="rounded-xl bg-white p-5 text-sm text-[#66777a]">Loading your lots…</p>}
+        {!loading && lots.length===0 && <div className="rounded-2xl border border-dashed border-[#c9d9d5] bg-white p-8 text-center"><ParkingCircle className="mx-auto size-8 text-[#176b67]"/><h3 className="mt-3 font-bold">No parking lots yet</h3><p className="mt-1 text-sm text-[#66777a]">Create your first lot using the form.</p></div>}
+        <div className="space-y-3">{lots.map(lot=><article key={lot.id} className="rounded-2xl border border-[#dfe8e5] bg-white p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">{lot.name}</h3><p className="mt-1 text-sm text-[#66777a]">{lot.address}, {lot.city}</p></div><span className="rounded-full bg-[#edf7f4] px-2.5 py-1 text-xs font-bold text-[#176b67]">{lot.status}</span></div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-[#edf1ef] pt-3 text-sm"><div><p className="text-[#66777a]">Capacity</p><p className="mt-1 font-semibold">{lot.totalCapacity ?? 'Not set'}</p></div><div><p className="text-[#66777a]">Lot ID</p><p className="mt-1 font-semibold">#{lot.id}</p></div></div></article>)}</div>
+      </section>
+    </div>}
+  </main>
 }
 
 function NotFound() {
