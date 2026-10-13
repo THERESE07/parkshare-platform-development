@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowRight, BadgeCheck, CarFront, CheckCircle2, Clock3, LoaderCircle,
   MapPin, ParkingCircle, Search, ShieldCheck, Ticket, WalletCards, XCircle,
 } from 'lucide-react'
-import { authApi, authToken, parkingApi, reservationApi, vehicleApi, type AuthResponse, type ParkingLot } from './lib/api'
+import { authApi, authToken, parkingApi, reservationApi, vehicleApi, type AuthResponse, type ParkingLot, type Vehicle } from './lib/api'
 
 function Brand() {
   return (
@@ -203,7 +203,7 @@ function ParkingDiscoveryPage() {
       {error && <div role="alert" className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-start gap-3"><XCircle className="mt-0.5 size-5 shrink-0 text-amber-700" /><div><h2 className="font-bold text-amber-950">Parking data could not be loaded</h2><p className="mt-1 text-sm leading-6 text-amber-900">{error}</p><p className="mt-2 text-xs text-amber-900">Check that the backend is running, that you are signed in if the endpoint requires authentication, and that CORS allows http://localhost:5173.</p></div></div></div>}
       {!loading && !error && filtered.length === 0 && <div className="mt-8 rounded-2xl border border-dashed border-[#c9d9d5] bg-white p-10 text-center"><ParkingCircle className="mx-auto size-8 text-[#176b67]" /><h2 className="mt-3 font-bold">No parking lots returned</h2><p className="mt-1 text-sm text-[#66777a]">The API returned no matching lots. We don't insert fake results.</p></div>}
       <div className="mt-7 grid gap-4 sm:grid-cols-2">
-        {filtered.map(lot => <article key={lot.id} className="rounded-2xl border border-[#dfe8e5] bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-bold">{lot.name}</h2><p className="mt-1 flex items-center gap-1 text-sm text-[#66777a]"><MapPin className="size-3.5" />{lot.address}, {lot.city}</p></div><span className="rounded-full bg-[#edf7f4] px-3 py-1 text-xs font-bold text-[#176b67]">{lot.status}</span></div><p className="mt-4 text-sm text-[#66777a]">{lot.description || 'No description provided by the operator.'}</p><div className="mt-4 flex items-center justify-between border-t border-[#edf1ef] pt-3 text-sm"><span className="text-[#66777a]">Reported capacity</span><strong>{lot.totalCapacity ?? 'Not provided'}</strong></div><p className="mt-3 text-xs leading-5 text-[#66777a]">Free-space count and freshness are not exposed in this parking-lot response. We will only show them after mapping the space/occupancy endpoints.</p></article>)}
+        {filtered.map(lot => <article key={lot.id} className="rounded-2xl border border-[#dfe8e5] bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-bold">{lot.name}</h2><p className="mt-1 flex items-center gap-1 text-sm text-[#66777a]"><MapPin className="size-3.5" />{lot.address}, {lot.city}</p></div><span className="rounded-full bg-[#edf7f4] px-3 py-1 text-xs font-bold text-[#176b67]">{lot.status}</span></div><p className="mt-4 text-sm text-[#66777a]">{lot.description || 'No description provided by the operator.'}</p><div className="mt-4 flex items-center justify-between border-t border-[#edf1ef] pt-3 text-sm"><span className="text-[#66777a]">Reported capacity</span><strong>{lot.totalCapacity ?? 'Not provided'}</strong></div><p className="mt-3 text-xs leading-5 text-[#66777a]">Free-space count and freshness are not exposed in this parking-lot response. We will only show them after mapping the space/occupancy endpoints.</p><Link to={authToken.get() ? `/driver/book/${lot.id}` : '/login'} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#176b67] px-4 py-2.5 text-sm font-semibold text-white">Reserve this lot <ArrowRight className="size-4"/></Link></article>)}
       </div>
     </main>
   )
@@ -282,6 +282,91 @@ function DriverVehiclesPage() {
         <div className="space-y-3">{vehicles.map(vehicle=><article key={vehicle.id} className="flex flex-col gap-4 rounded-2xl border border-[#dfe8e5] bg-white p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#edf7f4] text-[#176b67]"><CarFront className="size-5"/></span><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{vehicle.plateNumber}</h3>{vehicle.isDefault && <span className="rounded-full bg-[#edf7f4] px-2.5 py-1 text-xs font-bold text-[#176b67]">Default</span>}</div><p className="mt-1 text-sm text-[#66777a]">{[vehicle.make, vehicle.model, vehicle.color].filter(Boolean).join(' · ') || 'Vehicle details not provided'} · {vehicle.vehicleType}</p><p className="mt-1 text-xs text-[#66777a]">{vehicle.isActive ? 'Active' : 'Inactive'}</p></div></div>{!vehicle.isDefault && <button onClick={()=>void makeDefault(vehicle.id)} className="rounded-xl border border-[#d5e2df] px-3 py-2 text-sm font-semibold text-[#176b67] hover:bg-[#edf7f4]">Make default</button>}</article>)}</div>
       </section>
     </div>}
+  </main>
+}
+
+function DriverBookingPage() {
+  const { lotId } = useParams()
+  const navigate = useNavigate()
+  const user = getSignedInUser()
+  const [lot, setLot] = useState<ParkingLot | null>(null)
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [vehicleId, setVehicleId] = useState('')
+  const [startLocal, setStartLocal] = useState('')
+  const [endLocal, setEndLocal] = useState('')
+  const [amount, setAmount] = useState('')
+  const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    if (!user || !lotId) { setLoading(false); return }
+    Promise.all([parkingApi.get(Number(lotId)), vehicleApi.listByUser(user.userId)])
+      .then(([parkingLot, savedVehicles]) => {
+        setLot(parkingLot)
+        setVehicles(savedVehicles.filter(vehicle => vehicle.isActive))
+        const preferred = savedVehicles.find(vehicle => vehicle.isDefault && vehicle.isActive) || savedVehicles.find(vehicle => vehicle.isActive)
+        if (preferred) setVehicleId(String(preferred.id))
+      })
+      .catch(cause => setError(cause instanceof Error ? cause.message : 'Could not prepare the reservation form.'))
+      .finally(() => setLoading(false))
+  }, [user?.userId, lotId])
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!user || !lot) return
+    const start = new Date(startLocal)
+    const end = new Date(endLocal)
+    const total = Number(amount)
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+      setError('Choose a valid end time after the start time.')
+      return
+    }
+    if (!Number.isFinite(total) || total < 0) {
+      setError('Enter a valid non-negative amount agreed with the parking operator.')
+      return
+    }
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const created = await reservationApi.create({
+        userId: user.userId,
+        vehicleId: Number(vehicleId),
+        parkingLotId: lot.id,
+        reservation: {
+          reservationCode: `PS-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+          totalAmount: total,
+          currency: 'RWF',
+          notes: notes.trim() || undefined,
+        },
+      })
+      setNotice(`Reservation ${created.reservationCode || `#${created.id}`} was created with status ${created.status}.`)
+      window.setTimeout(() => navigate('/driver/reservations'), 1200)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Reservation could not be created.')
+    } finally { setSaving(false) }
+  }
+
+  return <main className="mx-auto min-h-[calc(100vh-72px)] max-w-4xl px-4 py-10 sm:px-6">
+    <Link to="/driver/find" className="text-sm font-semibold text-[#176b67]">← Back to parking</Link>
+    <div className="mt-5"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b67]">Reservation</p><h1 className="mt-2 text-3xl font-bold">Reserve parking</h1><p className="mt-2 text-sm text-[#66777a]">Choose your vehicle and time window. Confirm the amount with the operator before submitting.</p></div>
+    {!user && <div className="mt-6 rounded-2xl border border-[#dfe8e5] bg-white p-5">Please <Link to="/login" className="font-semibold text-[#176b67] underline">sign in</Link> before creating a reservation.</div>}
+    {loading && <p className="mt-6 rounded-xl bg-white p-5 text-sm text-[#66777a]">Loading parking and saved vehicles…</p>}
+    {error && <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
+    {notice && <p role="status" className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{notice}</p>}
+    {user && !loading && lot && <form onSubmit={submit} className="mt-6 space-y-5 rounded-2xl border border-[#dfe8e5] bg-white p-5 sm:p-7">
+      <section className="rounded-xl bg-[#edf7f4] p-4"><h2 className="font-bold">{lot.name}</h2><p className="mt-1 text-sm text-[#66777a]">{lot.address}, {lot.city}</p><p className="mt-2 text-xs text-[#66777a]">Capacity: {lot.totalCapacity ?? 'Not provided'} · Status: {lot.status}</p></section>
+      {vehicles.length === 0 ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">You need an active vehicle before reserving. <Link to="/driver/vehicles" className="font-semibold underline">Add a vehicle</Link>.</div> : <label className="block text-sm font-semibold">Vehicle<select required value={vehicleId} onChange={e=>setVehicleId(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] bg-white px-3 font-normal">{vehicles.map(vehicle=><option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber}{vehicle.isDefault ? ' · Default' : ''}</option>)}</select></label>}
+      <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-semibold">Start time<input required type="datetime-local" value={startLocal} onChange={e=>setStartLocal(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal" /></label><label className="block text-sm font-semibold">End time<input required type="datetime-local" min={startLocal || undefined} value={endLocal} onChange={e=>setEndLocal(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal" /></label></div>
+      <label className="block text-sm font-semibold">Agreed amount (RWF)<input required type="number" min="0" step="1" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="Enter amount confirmed with the operator" className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal" /><span className="mt-1.5 block text-xs font-normal leading-5 text-[#66777a]">The current parking-lot API does not provide a verified price. This amount is entered by you and is not an automatically calculated quote.</span></label>
+      <label className="block text-sm font-semibold">Notes <span className="font-normal text-[#66777a]">(optional)</span><textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Arrival details or accessibility needs" className="mt-1.5 w-full rounded-xl border border-[#d5e2df] p-3 font-normal" /></label>
+      <button disabled={saving || vehicles.length===0} className="h-12 w-full rounded-xl bg-[#176b67] px-4 font-semibold text-white disabled:opacity-60">{saving ? 'Creating reservation…' : 'Create reservation'}</button>
+      <p className="text-xs leading-5 text-[#66777a]">This submits a reservation record. It does not charge a payment method or confirm mobile-money payment.</p>
+    </form>}
+    {user && !loading && !lot && !error && <div className="mt-6 rounded-xl bg-white p-5 text-sm text-[#66777a]">Parking lot not found.</div>}
   </main>
 }
 
@@ -398,5 +483,5 @@ function NotFound() {
 }
 
 export default function App() {
-  return <><Header /><Routes><Route path="/" element={<LandingPage />} /><Route path="/login" element={<LoginPage />} /><Route path="/driver" element={<Navigate to="/driver/find" replace />} /><Route path="/driver/find" element={<ParkingDiscoveryPage />} /><Route path="/driver/vehicles" element={<DriverVehiclesPage />} /><Route path="/driver/reservations" element={<DriverReservationsPage />} /><Route path="/operator" element={<OperatorPage />} /><Route path="*" element={<NotFound />} /></Routes></>
+  return <><Header /><Routes><Route path="/" element={<LandingPage />} /><Route path="/login" element={<LoginPage />} /><Route path="/driver" element={<Navigate to="/driver/find" replace />} /><Route path="/driver/find" element={<ParkingDiscoveryPage />} /><Route path="/driver/vehicles" element={<DriverVehiclesPage />} /><Route path="/driver/book/:lotId" element={<DriverBookingPage />} /><Route path="/driver/reservations" element={<DriverReservationsPage />} /><Route path="/operator" element={<OperatorPage />} /><Route path="*" element={<NotFound />} /></Routes></>
 }
