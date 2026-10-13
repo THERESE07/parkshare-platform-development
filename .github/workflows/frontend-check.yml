@@ -22,7 +22,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --allow-build=esbuild
       - name: Type-check
         run: pnpm typecheck
       - name: Build production bundle
