@@ -130,6 +130,24 @@ export type ParkingLotRequest = {
   status?: string
 }
 
+export type ParkingZone = {
+  id: number
+  parkingLotId: number
+  name: string
+  description: string | null
+  capacity: number | null
+  status: string
+}
+
+export type ParkingSpace = {
+  id: number
+  parkingZoneId: number
+  spaceCode: string
+  spaceType: string
+  status: string
+  floor: string | null
+}
+
 export type Vehicle = {
   id: number
   userId: number
@@ -257,6 +275,18 @@ export const parkingApi = {
   },
   update(id: number, input: ParkingLotRequest): Promise<ParkingLot> {
     return request(`/parking-lots/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+  },
+}
+
+export const parkingZoneApi = {
+  listByParkingLot(parkingLotId: number): Promise<ParkingZone[]> {
+    return request(`/parking-zones/parking-lot/${parkingLotId}`)
+  },
+}
+
+export const parkingSpaceApi = {
+  listByZone(parkingZoneId: number): Promise<ParkingSpace[]> {
+    return request(`/parking-spaces/zone/${parkingZoneId}`)
   },
 }
 
