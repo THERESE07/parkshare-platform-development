@@ -7,7 +7,7 @@ Audit source:
 
 ## Current status
 
-The original v0 frontend is a Next.js 16 App Router project. The requested target is React + TypeScript + Vite. The Vite migration branch now has a Vite entry point, React Router, a typed API service, login flow, API-backed parking discovery, driver vehicle management, driver reservation history/cancellation, and an operator parking-lot creation/list screen. A GitHub Actions workflow was added for type-check and production-build validation; its latest run is still in progress. Existing Next.js routes/components remain as a design reference and are not yet all ported to the Vite router.
+The original v0 frontend is a Next.js 16 App Router project. The requested target is React + TypeScript + Vite. The Vite migration branch now has a Vite entry point, React Router, a typed API service, login flow, API-backed parking discovery, driver vehicle management, a driver reservation form/history/cancellation flow, and an operator parking-lot creation/list screen. A GitHub Actions workflow was added for type-check and production-build validation; its latest run is still in progress. Existing Next.js routes/components remain as a design reference and are not yet all ported to the Vite router.
 
 ## Backend contracts confirmed in source
 
@@ -29,7 +29,7 @@ The original v0 frontend is a Next.js 16 App Router project. The requested targe
 2. Mock data: original lib/parkshare-data.ts contains demo parking lots, bookings, events and operator reservations. Those cannot be used as production API truth.
 3. Availability contract gap: the current parking-lot DTO has total capacity and status only. UI claims like spaces free, last-updated time, operator verified, hourly price and reviews cannot be sourced from that DTO. Need map spaces/occupancy, verification and pricing endpoints or extend backend read DTOs.
 4. Role routes incomplete in original tree: the landing page links to Driver, Operator, Attendant, Event Organizer and Admin, but original tracked route tree contains driver and operator pages only. Attendant, organizer and admin workspaces must be implemented before those role links can be considered complete.
-5. Reservation history and cancellation now use the API. The booking-creation UI still needs to be ported and connected to the reservation endpoint, including vehicle/user IDs, ISO-8601 start/end timestamps, and a trustworthy price source.
+5. Reservation creation, history, and cancellation now use the API. The booking form requires an active saved vehicle and a user-entered amount confirmed with the operator because the current parking-lot DTO does not supply a verified quote. The UI clearly states that creating a reservation record does not process or confirm payment.
 6. Payment confirmation risk: a local payment record is not the same as successful mobile-money checkout. Payment UI must display pending/failed/success only according to backend/provider state.
 7. CORS missing: no dedicated CORS configuration class was found in the backend tree. The backend compatibility branch adds configurable local Vite origins.
 8. Discovery security mismatch: SecurityConfig's comment labels parking discovery public, but original rules require DRIVER/OPERATOR/ADMIN roles. The backend compatibility branch changes GET discovery/detail routes to permitAll, leaving management requests role-protected.
