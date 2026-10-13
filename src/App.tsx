@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowRight, BadgeCheck, CarFront, CheckCircle2, Clock3, LoaderCircle,
   MapPin, ParkingCircle, Search, ShieldCheck, Ticket, WalletCards, XCircle,
 } from 'lucide-react'
-import { ApiError, authApi, authToken, parkingApi, type AuthResponse, type ParkingLot } from './lib/api'
+import { authApi, authToken, parkingApi, type AuthResponse, type ParkingLot } from './lib/api'
 
 function Brand() {
   return (
@@ -18,9 +18,10 @@ function Brand() {
 }
 
 function Header() {
-  const [signedIn, setSignedIn] = useState(Boolean(authToken.get()))
+  const location = useLocation()
+  const signedIn = Boolean(authToken.get())
   return (
-    <header className="sticky top-0 z-20 border-b border-[#dfe8e5] bg-white/90 backdrop-blur">
+    <header data-path={location.pathname} className="sticky top-0 z-20 border-b border-[#dfe8e5] bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-4 sm:px-6">
         <Brand />
         <nav className="hidden items-center gap-7 text-sm font-medium text-[#66777a] md:flex">
@@ -30,7 +31,7 @@ function Header() {
         </nav>
         <div className="flex items-center gap-2">
           {signedIn ? (
-            <button onClick={() => { authApi.logout(); setSignedIn(false) }} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-[#176b67] hover:bg-[#edf5f3]">Sign out</button>
+            <button onClick={() => { authApi.logout(); window.sessionStorage.removeItem('parkshare.authUser'); window.location.assign('/') }} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-[#176b67] hover:bg-[#edf5f3]">Sign out</button>
           ) : (
             <Link to="/login" className="rounded-xl px-4 py-2.5 text-sm font-semibold text-[#176b67] hover:bg-[#edf5f3]">Sign in</Link>
           )}
@@ -146,6 +147,7 @@ function LoginPage() {
     setError('')
     try {
       const result = await authApi.login({ email, password })
+      window.sessionStorage.setItem('parkshare.authUser', JSON.stringify(result))
       setUser(result)
       window.setTimeout(() => navigate('/driver/find'), 350)
     } catch (cause) {
