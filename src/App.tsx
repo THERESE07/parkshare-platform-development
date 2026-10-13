@@ -4,7 +4,7 @@ import {
   ArrowRight, BadgeCheck, CarFront, CheckCircle2, Clock3, LoaderCircle,
   MapPin, ParkingCircle, Search, ShieldCheck, Ticket, WalletCards, XCircle,
 } from 'lucide-react'
-import { authApi, authToken, parkingApi, reservationApi, vehicleApi, type AuthResponse, type ParkingLot, type Vehicle } from './lib/api'
+import { authApi, authToken, parkingApi, parkingSpaceApi, parkingZoneApi, reservationApi, vehicleApi, type AuthResponse, type ParkingLot, type ParkingSpace, type ParkingZone, type Vehicle } from './lib/api'
 
 function Brand() {
   return (
@@ -291,7 +291,10 @@ function DriverBookingPage() {
   const user = getSignedInUser()
   const [lot, setLot] = useState<ParkingLot | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [zones, setZones] = useState<ParkingZone[]>([])
+  const [spaces, setSpaces] = useState<ParkingSpace[]>([])
   const [vehicleId, setVehicleId] = useState('')
+  const [parkingSpaceId, setParkingSpaceId] = useState('')
   const [startLocal, setStartLocal] = useState('')
   const [endLocal, setEndLocal] = useState('')
   const [amount, setAmount] = useState('')
@@ -303,12 +306,21 @@ function DriverBookingPage() {
 
   useEffect(() => {
     if (!user || !lotId) { setLoading(false); return }
-    Promise.all([parkingApi.get(Number(lotId)), vehicleApi.listByUser(user.userId)])
-      .then(([parkingLot, savedVehicles]) => {
+    Promise.all([
+      parkingApi.get(Number(lotId)),
+      vehicleApi.listByUser(user.userId),
+      parkingZoneApi.listByParkingLot(Number(lotId)),
+    ])
+      .then(async ([parkingLot, savedVehicles, lotZones]) => {
         setLot(parkingLot)
         setVehicles(savedVehicles.filter(vehicle => vehicle.isActive))
         const preferred = savedVehicles.find(vehicle => vehicle.isDefault && vehicle.isActive) || savedVehicles.find(vehicle => vehicle.isActive)
         if (preferred) setVehicleId(String(preferred.id))
+        const activeZones = lotZones.filter(zone => !zone.status || zone.status.toUpperCase() === 'ACTIVE')
+        setZones(activeZones)
+        const spacesByZone = await Promise.all(activeZones.map(zone => parkingSpaceApi.listByZone(zone.id)))
+        const lotSpaces = spacesByZone.flat().filter(space => space.status?.toUpperCase() === 'AVAILABLE')
+        setSpaces(lotSpaces)
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : 'Could not prepare the reservation form.'))
       .finally(() => setLoading(false))
@@ -334,6 +346,7 @@ function DriverBookingPage() {
         userId: user.userId,
         vehicleId: Number(vehicleId),
         parkingLotId: lot.id,
+        parkingSpaceId: parkingSpaceId ? Number(parkingSpaceId) : undefined,
         reservation: {
           reservationCode: `PS-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
           startTime: start.toISOString(),
@@ -360,6 +373,13 @@ function DriverBookingPage() {
     {user && !loading && lot && <form onSubmit={submit} className="mt-6 space-y-5 rounded-2xl border border-[#dfe8e5] bg-white p-5 sm:p-7">
       <section className="rounded-xl bg-[#edf7f4] p-4"><h2 className="font-bold">{lot.name}</h2><p className="mt-1 text-sm text-[#66777a]">{lot.address}, {lot.city}</p><p className="mt-2 text-xs text-[#66777a]">Capacity: {lot.totalCapacity ?? 'Not provided'} · Status: {lot.status}</p></section>
       {vehicles.length === 0 ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">You need an active vehicle before reserving. <Link to="/driver/vehicles" className="font-semibold underline">Add a vehicle</Link>.</div> : <label className="block text-sm font-semibold">Vehicle<select required value={vehicleId} onChange={e=>setVehicleId(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] bg-white px-3 font-normal">{vehicles.map(vehicle=><option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber}{vehicle.isDefault ? ' · Default' : ''}</option>)}</select></label>}
+      <label className="block text-sm font-semibold">Parking space <span className="font-normal text-[#66777a]">(optional)</span>
+        <select value={parkingSpaceId} onChange={e=>setParkingSpaceId(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] bg-white px-3 font-normal">
+          <option value="">Let the operator assign a space</option>
+          {spaces.map(space=><option key={space.id} value={space.id}>{space.spaceCode}{space.floor ? ` · ${space.floor}` : ''} · {space.spaceType}</option>)}
+        </select>
+        <span className="mt-1.5 block text-xs font-normal leading-5 text-[#66777a]">{spaces.length > 0 ? `${spaces.length} space(s) currently marked available across ${zones.length} active zone(s).` : zones.length > 0 ? 'No spaces are currently marked available. You can still request a reservation and let the operator assign a space.' : 'This lot has no active zones yet, so the operator may need to assign a space.'} Availability is a current status snapshot and is not a time-window guarantee.</span>
+      </label>
       <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-semibold">Start time<input required type="datetime-local" value={startLocal} onChange={e=>setStartLocal(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal" /></label><label className="block text-sm font-semibold">End time<input required type="datetime-local" min={startLocal || undefined} value={endLocal} onChange={e=>setEndLocal(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal" /></label></div>
       <label className="block text-sm font-semibold">Agreed amount (RWF)<input required type="number" min="0" step="1" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="Enter amount confirmed with the operator" className="mt-1.5 h-11 w-full rounded-xl border border-[#d5e2df] px-3 font-normal" /><span className="mt-1.5 block text-xs font-normal leading-5 text-[#66777a]">The current parking-lot API does not provide a verified price. This amount is entered by you and is not an automatically calculated quote.</span></label>
       <label className="block text-sm font-semibold">Notes <span className="font-normal text-[#66777a]">(optional)</span><textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Arrival details or accessibility needs" className="mt-1.5 w-full rounded-xl border border-[#d5e2df] p-3 font-normal" /></label>
