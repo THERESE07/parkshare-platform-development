@@ -222,6 +222,7 @@ export const authApi = {
       body: JSON.stringify(input),
     })
     authToken.set(result.token)
+    window.sessionStorage.setItem('parkshare.authUser', JSON.stringify(result))
     return result
   },
   async register(input: RegisterRequest): Promise<unknown> {
