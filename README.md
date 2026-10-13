@@ -1,33 +1,39 @@
-# parkshare-platform-development
+# ParkShare frontend
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+React + TypeScript + Vite frontend for the ParkShare Spring Boot API.
 
-## Built with v0
+## Requirements
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+- Node.js 20.19+ or 22.12+
+- pnpm (the repository's package manager)
+- ParkShare backend running locally on port 8080 for API-backed screens
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_nFVV73Xl2hwyw0jTkbPF49U3CIPb)
+## Setup
 
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
+```powershell
+pnpm install
+Copy-Item .env.example .env.local
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:5173.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Set `VITE_API_BASE_URL=http://localhost:8080/api` in `.env.local` for the local Spring Boot backend. Never put database passwords, JWT signing secrets, or other server secrets in Vite environment variables: `VITE_*` values are included in browser code.
 
-## Learn More
+## Available commands
 
-To learn more, take a look at the following resources:
+- `pnpm dev` — Vite development server
+- `pnpm typecheck` — TypeScript validation
+- `pnpm build` — TypeScript validation and production build
+- `pnpm preview` — preview the production build
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+## API layer
+
+The typed API service is in `src/lib/api.ts`. It centralizes the base URL, Bearer token, HTTP errors, and methods for authentication, parking lots, vehicles, reservations, payments, and events. The access token is kept in session storage for the current browser session.
+
+## Integration notes
+
+- Many backend endpoints require a Bearer token and specific roles. Sign in with an account that has the correct role before using protected endpoints.
+- The current backend `ParkingLotResponseDto` exposes total capacity and status, but not a live free-space count, freshness timestamp, verification state, or pricing. The UI must not fabricate these values; these require mapping the spaces, occupancy, verification, and pricing endpoints.
+- The payment endpoints create and manage payment records. They do not by themselves confirm that MTN MoMo or Airtel Money provider checkout is configured. Do not show payment success until a trusted provider/backend response confirms it.
+- The original v0-generated Next.js pages and components remain as a reference while the Vite routes are migrated and checked incrementally. The Vite TypeScript build currently includes `src/` only.
