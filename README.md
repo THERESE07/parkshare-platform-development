@@ -36,4 +36,3 @@ The typed API service is in `src/lib/api.ts`. It centralizes the base URL, Beare
 - Many backend endpoints require a Bearer token and specific roles. Sign in with an account that has the correct role before using protected endpoints.
 - The current backend `ParkingLotResponseDto` exposes total capacity and status, but not a live free-space count, freshness timestamp, verification state, or pricing. The UI must not fabricate these values; these require mapping the spaces, occupancy, verification, and pricing endpoints.
 - The payment endpoints create and manage payment records. They do not by themselves confirm that MTN MoMo or Airtel Money provider checkout is configured. Do not show payment success until a trusted provider/backend response confirms it.
-- The original v0-generated Next.js pages and components remain as a reference while the Vite routes are migrated and checked incrementally. The Vite TypeScript build currently includes `src/` only.
