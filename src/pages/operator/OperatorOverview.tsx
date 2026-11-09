@@ -6,6 +6,7 @@ import { useLoad } from "../../lib/useLoad";
 import { Alert, ButtonLink, Card, EmptyState, Loading, OccupancyBar, PageHeader, Stat } from "../../components/ui";
 import { LotStatusPill, ReservationStatusPill } from "../../components/parking";
 import { inUse, isFree, loadOperatorLots } from "./data";
+import { VerificationCard } from "./VerificationCard";
 
 const EARNING = ["CONFIRMED", "CHECKED_IN", "COMPLETED"];
 
@@ -21,6 +22,7 @@ export default function OperatorOverview() {
     return (
       <div>
         <PageHeader title="Overview" description={`${formatDate(new Date().toISOString())} · Welcome, ${user.firstName}.`} />
+        <VerificationCard userId={user.userId} />
         <EmptyState
           icon={<MapPinned className="size-6" />}
           title="List your first parking lot"
@@ -51,6 +53,8 @@ export default function OperatorOverview() {
         title="Overview"
         description={`${formatDate(new Date().toISOString())} · Live across your ${lots.length} ${lots.length === 1 ? "lot" : "lots"}.`}
       />
+
+      <VerificationCard userId={user.userId} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat

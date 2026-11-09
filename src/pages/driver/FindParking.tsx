@@ -1,98 +1,82 @@
 import { useMemo, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
-import { parkingApi } from "../../lib/api";
+import { List, LoaderCircle, LocateFixed, Map as MapIcon, Search, X } from "lucide-react";
+import { parkingApi } from "../../api";
+import { distanceKm, hasLocation, useGeolocation } from "../../lib/geo";
 import { useLoad } from "../../lib/useLoad";
-import { Alert, Card, EmptyState, Input, Loading, PageHeader, Pill, Select, cn } from "../../components/ui";
-import { LotCard, MapSurface } from "../../components/parking";
+import { Alert, EmptyState, Input, Loading, PageHeader, Pill, Select, buttonClass, cn } from "../../components/ui";
+import { LotCard } from "../../components/parking";
+import { ParkingMap } from "../../components/map";
 
-type SortKey = "name" | "capacity" | "newest";
+type SortKey = "distance" | "name" | "capacity";
 
 export default function FindParking() {
-  const { data: lots, loading, error } = useLoad(() => parkingApi.list());
+  // Approved lots only: /parking-lots also returns lots awaiting approval (guide §9).
+  const { data: lots, loading, error } = useLoad(() => parkingApi.listActive());
+  const geo = useGeolocation(true);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("name");
-  const [openOnly, setOpenOnly] = useState(true);
+  const [sort, setSort] = useState<SortKey>("distance");
   const [city, setCity] = useState("all");
-  const [showFilters, setShowFilters] = useState(false);
   const [activeId, setActiveId] = useState<number | undefined>();
+  const [view, setView] = useState<"split" | "list">("split");
 
-  const cities = useMemo(
-    () => [...new Set((lots ?? []).map((l) => l.city).filter(Boolean))].sort(),
-    [lots],
-  );
+  const cities = useMemo(() => [...new Set((lots ?? []).map((l) => l.city).filter(Boolean))].sort(), [lots]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = (lots ?? []).filter((l) => {
-      const matchesQuery =
-        !q || `${l.name} ${l.address} ${l.city} ${l.description ?? ""}`.toLowerCase().includes(q);
-      const matchesOpen = !openOnly || l.status?.toUpperCase() === "ACTIVE";
-      const matchesCity = city === "all" || l.city === city;
-      return matchesQuery && matchesOpen && matchesCity;
+    const list = (lots ?? [])
+      .filter((l) => !q || `${l.name} ${l.address} ${l.city} ${l.description ?? ""}`.toLowerCase().includes(q))
+      .filter((l) => city === "all" || l.city === city)
+      .map((lot) => ({
+        lot,
+        distance: geo.position && hasLocation(lot) ? distanceKm(geo.position, { lat: lot.latitude, lng: lot.longitude }) : null,
+      }));
+    return list.sort((a, b) => {
+      if (sort === "distance" && (a.distance !== null || b.distance !== null))
+        return (a.distance ?? Infinity) - (b.distance ?? Infinity);
+      if (sort === "capacity") return (b.lot.totalCapacity ?? 0) - (a.lot.totalCapacity ?? 0);
+      return a.lot.name.localeCompare(b.lot.name);
     });
-    return [...list].sort((a, b) => {
-      if (sort === "capacity") return (b.totalCapacity ?? 0) - (a.totalCapacity ?? 0);
-      if (sort === "newest") return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
-      return a.name.localeCompare(b.name);
-    });
-  }, [lots, query, sort, openOnly, city]);
-
-  const activeCount = (openOnly ? 0 : 1) + (city !== "all" ? 1 : 0);
+  }, [lots, query, city, sort, geo.position]);
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Find parking" description="Parking lots registered on ParkShare, straight from the operators." />
+      <PageHeader
+        title="Find parking"
+        description="Approved parking lots near you."
+        action={
+          <div className="flex gap-1 rounded-xl border border-border bg-card p-1">
+            {(["split", "list"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                aria-pressed={view === v}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium",
+                  view === v ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+                )}
+              >
+                {v === "split" ? <MapIcon className="size-4" /> : <List className="size-4" />}
+                {v === "split" ? "Map" : "List"}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Lot name, street or city"
-            className="pl-10"
-            aria-label="Search parking"
-          />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Lot name, street or city" className="pl-10" aria-label="Search parking" />
         </div>
-        <button
-          type="button"
-          onClick={() => setShowFilters((s) => !s)}
-          aria-expanded={showFilters}
-          className={cn(
-            "inline-flex h-11 items-center gap-2 rounded-xl border border-input bg-card px-4 text-sm font-medium shadow-sm transition-colors hover:bg-muted",
-            showFilters && "border-primary/40 bg-accent text-accent-foreground",
-          )}
-        >
-          <SlidersHorizontal className="size-4" />
-          <span className="hidden sm:inline">Filters</span>
-          {activeCount > 0 && (
-            <span className="grid size-5 place-items-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-              {activeCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {showFilters && (
-        <Card className="grid gap-4 p-4 sm:grid-cols-3">
-          <label className="space-y-1.5">
-            <span className="text-sm font-medium">Sort by</span>
-            <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-              <option value="name">Name (A–Z)</option>
-              <option value="capacity">Largest capacity</option>
-              <option value="newest">Newest on ParkShare</option>
-            </Select>
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-sm font-medium">Status</span>
-            <Select value={openOnly ? "open" : "all"} onChange={(e) => setOpenOnly(e.target.value === "open")}>
-              <option value="open">Open for booking only</option>
-              <option value="all">Show all lots</option>
-            </Select>
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-sm font-medium">City</span>
-            <Select value={city} onChange={(e) => setCity(e.target.value)}>
+        <div className="flex gap-2">
+          <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort by" className="sm:w-44">
+            <option value="distance">Nearest first</option>
+            <option value="name">Name (A–Z)</option>
+            <option value="capacity">Largest</option>
+          </Select>
+          {cities.length > 1 && (
+            <Select value={city} onChange={(e) => setCity(e.target.value)} aria-label="City" className="sm:w-40">
               <option value="all">All cities</option>
               {cities.map((c) => (
                 <option key={c} value={c}>
@@ -100,16 +84,22 @@ export default function FindParking() {
                 </option>
               ))}
             </Select>
-          </label>
-        </Card>
-      )}
+          )}
+          {!geo.position && (
+            <button type="button" onClick={geo.request} className={buttonClass("outline", "md", "shrink-0")} title="Use my location">
+              {geo.loading ? <LoaderCircle className="size-4 animate-spin" /> : <LocateFixed className="size-4" />}
+              <span className="hidden sm:inline">Near me</span>
+            </button>
+          )}
+        </div>
+      </div>
 
-      {activeCount > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {!openOnly && (
-            <button type="button" onClick={() => setOpenOnly(true)}>
+      {(city !== "all" || query) && (
+        <div className="flex flex-wrap gap-2">
+          {query && (
+            <button type="button" onClick={() => setQuery("")}>
               <Pill tone="primary">
-                Including closed lots <X className="size-3" />
+                “{query}” <X className="size-3" />
               </Pill>
             </button>
           )}
@@ -122,40 +112,44 @@ export default function FindParking() {
           )}
         </div>
       )}
+      {geo.error && <p className="text-xs text-muted-foreground">{geo.error} Distances are hidden.</p>}
 
       {loading && <Loading>Loading parking…</Loading>}
       {error && <Alert title="Parking could not be loaded">{error}</Alert>}
 
       {!loading && !error && (
-        <>
-          <MapSurface lots={results} activeId={activeId} onSelect={setActiveId} className="h-56 sm:h-72" />
-          <p className="text-sm font-medium text-muted-foreground">
-            {results.length} {results.length === 1 ? "result" : "results"}
-          </p>
-          {results.length === 0 ? (
-            <EmptyState
-              icon={<Search className="size-6" />}
-              title="No parking matches your search"
-              description={
-                openOnly
-                  ? "Try another search, or include lots that are not open for booking yet."
-                  : "Try another search or clear your filters."
-              }
+        <div className={cn(view === "split" && "grid gap-4 lg:grid-cols-[1fr_1.1fr]")}>
+          {view === "split" && (
+            <ParkingMap
+              lots={results.map((r) => r.lot)}
+              activeId={activeId}
+              onSelect={setActiveId}
+              user={geo.position}
+              className="h-72 sm:h-96 lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]"
             />
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {results.map((lot) => (
-                <div
-                  key={lot.id}
-                  onMouseEnter={() => setActiveId(lot.id)}
-                  className={cn(activeId === lot.id && "rounded-2xl ring-2 ring-primary/40")}
-                >
-                  <LotCard lot={lot} />
-                </div>
-              ))}
-            </div>
           )}
-        </>
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">
+              {results.length} {results.length === 1 ? "lot" : "lots"}
+              {results.some((r) => !hasLocation(r.lot)) && " · some lots aren't pinned on the map yet"}
+            </p>
+            {results.length === 0 ? (
+              <EmptyState icon={<Search className="size-6" />} title="No parking matches your search" description="Try another name, street or city." />
+            ) : (
+              <div className={cn("grid gap-3", view === "list" && "sm:grid-cols-2")}>
+                {results.map(({ lot, distance }) => (
+                  <div
+                    key={lot.id}
+                    onMouseEnter={() => setActiveId(lot.id)}
+                    className={cn(activeId === lot.id && "rounded-2xl ring-2 ring-primary/40")}
+                  >
+                    <LotCard lot={lot} distance={distance} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

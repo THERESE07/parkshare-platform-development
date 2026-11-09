@@ -48,80 +48,80 @@ export default function LandingPage() {
     },
   ];
   return (
-    <div className="bg-[#f8faf9]">
+    <div className="bg-background">
       <main>
         <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pb-24 sm:pt-20 lg:grid-cols-[1.08fr_.92fr]">
           <div>
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#cce4df] bg-[#edf7f4] px-3.5 py-2 text-xs font-semibold text-[#176b67]">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-accent px-3.5 py-2 text-xs font-semibold text-primary">
               <MapPin className="size-3.5" /> Built in Kigali · designed for
               Rwanda
             </div>
-            <h1 className="max-w-2xl text-4xl font-extrabold leading-[1.08] text-[#203238] sm:text-5xl lg:text-6xl">
+            <h1 className="max-w-2xl text-4xl font-extrabold leading-[1.08] text-foreground sm:text-5xl lg:text-6xl">
               Know your parking.{" "}
-              <span className="text-[#176b67]">Reserve it.</span> Arrive with
+              <span className="text-primary">Reserve it.</span> Arrive with
               confidence.
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-[#66777a]">
+            <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
               Find parking with clear information, book before you arrive, and
               connect your reservation to the real parking experience.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/driver/find"
-                className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#176b67] px-5 font-semibold text-white shadow-md shadow-[#176b67]/15 hover:bg-[#10534f]"
+                className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-5 font-semibold text-primary-foreground shadow-md shadow-primary/15 hover:bg-primary-dark"
               >
                 Explore parking <ArrowRight className="size-4" />
               </Link>
               <Link
                 to="/signup?as=operator"
-                className="inline-flex h-12 items-center rounded-xl border border-[#d5e2df] bg-white px-5 font-semibold text-[#203238] hover:border-[#8bbdb6]"
+                className="inline-flex h-12 items-center rounded-xl border border-input bg-card px-5 font-semibold text-foreground hover:border-primary/50"
               >
                 List your parking
               </Link>
             </div>
-            <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-[#dfe8e5] pt-6">
+            <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-border pt-6">
               <div>
-                <p className="text-2xl font-extrabold text-[#203238]">Kigali</p>
-                <p className="mt-1 text-xs text-[#66777a]">
+                <p className="text-2xl font-extrabold text-foreground">Kigali</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   First launch market
                 </p>
               </div>
               <div>
-                <p className="text-2xl font-extrabold text-[#203238]">RWF</p>
-                <p className="mt-1 text-xs text-[#66777a]">Local pricing</p>
+                <p className="text-2xl font-extrabold text-foreground">RWF</p>
+                <p className="mt-1 text-xs text-muted-foreground">Local pricing</p>
               </div>
               <div>
-                <p className="text-2xl font-extrabold text-[#203238]">
+                <p className="text-2xl font-extrabold text-foreground">
                   One flow
                 </p>
-                <p className="mt-1 text-xs text-[#66777a]">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Search to check-in
                 </p>
               </div>
             </div>
           </div>
           <div className="relative">
-            <div className="rounded-[28px] border border-[#dfe8e5] bg-white p-4 shadow-xl shadow-[#234b46]/8 sm:p-5">
-              <div className="rounded-2xl bg-[#edf4f2] p-4 sm:p-5">
+            <div className="rounded-[28px] border border-border bg-card p-4 shadow-xl shadow-black/5 sm:p-5">
+              <div className="rounded-2xl bg-secondary p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#176b67]">
+                    <p className="text-xs font-semibold uppercase tracking-[.14em] text-primary">
                       Parking discovery
                     </p>
                     <h2 className="mt-1 text-lg font-bold">
                       Near your destination
                     </h2>
                   </div>
-                  <span className="grid size-10 place-items-center rounded-xl bg-white text-[#176b67]">
+                  <span className="grid size-10 place-items-center rounded-xl bg-card text-primary">
                     <MapPin className="size-5" />
                   </span>
                 </div>
-                <div className="mt-4 rounded-xl border border-[#dfe8e5] bg-white p-3.5">
+                <div className="mt-4 rounded-xl border border-border bg-card p-3.5">
                   <div className="flex items-center gap-3">
-                    <Search className="size-5 text-[#176b67]" />
+                    <Search className="size-5 text-primary" />
                     <div>
                       <p className="text-sm font-semibold">Search Kigali</p>
-                      <p className="text-xs text-[#66777a]">
+                      <p className="text-xs text-muted-foreground">
                         Area, destination or parking name
                       </p>
                     </div>
@@ -143,9 +143,9 @@ export default function LandingPage() {
                 ].map(([title, desc], index) => (
                   <div
                     key={title}
-                    className="mt-3 flex gap-3 rounded-xl border border-[#dfe8e5] bg-white p-3.5"
+                    className="mt-3 flex gap-3 rounded-xl border border-border bg-card p-3.5"
                   >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#edf7f4] text-[#176b67]">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
                       {index === 0 ? (
                         <Clock3 className="size-4" />
                       ) : index === 1 ? (
@@ -156,7 +156,7 @@ export default function LandingPage() {
                     </span>
                     <div>
                       <p className="text-sm font-semibold">{title}</p>
-                      <p className="mt-1 text-xs leading-5 text-[#66777a]">
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
                         {desc}
                       </p>
                     </div>
@@ -164,24 +164,24 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-            <div className="absolute -bottom-4 -left-3 hidden items-center gap-2 rounded-xl border border-[#dfe8e5] bg-white px-4 py-3 shadow-lg sm:flex">
-              <BadgeCheck className="size-5 text-[#176b67]" />
+            <div className="absolute -bottom-4 -left-3 hidden items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 shadow-lg sm:flex">
+              <BadgeCheck className="size-5 text-primary" />
               <span className="text-sm font-semibold">
                 Verified when confirmed
               </span>
             </div>
           </div>
         </section>
-        <section id="how" className="border-y border-[#dfe8e5] bg-white">
+        <section id="how" className="border-y border-border bg-card">
           <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
             <div className="max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b67]">
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-primary">
                 How it works
               </p>
               <h2 className="mt-2 text-3xl font-bold">
                 From search to parked in four steps
               </h2>
-              <p className="mt-3 text-[#66777a]">
+              <p className="mt-3 text-muted-foreground">
                 Designed around the real steps that make a parking reservation
                 trustworthy.
               </p>
@@ -211,11 +211,11 @@ export default function LandingPage() {
               ].map(([n, title, desc]) => (
                 <article
                   key={n}
-                  className="rounded-2xl border border-[#dfe8e5] p-5"
+                  className="rounded-2xl border border-border p-5"
                 >
-                  <span className="text-sm font-bold text-[#176b67]">{n}</span>
+                  <span className="text-sm font-bold text-primary">{n}</span>
                   <h3 className="mt-3 text-lg font-bold">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#66777a]">
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
                     {desc}
                   </p>
                 </article>
@@ -227,7 +227,7 @@ export default function LandingPage() {
           <h2 className="text-3xl font-bold">
             One network, different workspaces
           </h2>
-          <p className="mt-3 max-w-2xl text-[#66777a]">
+          <p className="mt-3 max-w-2xl text-muted-foreground">
             Each role should see only the operations it is allowed to perform.
           </p>
           <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -235,23 +235,23 @@ export default function LandingPage() {
               <Link
                 to={href}
                 key={title}
-                className="group rounded-2xl border border-[#dfe8e5] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#9ccbc3] hover:shadow-lg"
+                className="group rounded-2xl border border-border bg-card p-5 transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
               >
-                <span className="grid size-11 place-items-center rounded-xl bg-[#edf7f4] text-[#176b67]">
+                <span className="grid size-11 place-items-center rounded-xl bg-accent text-primary">
                   <Icon className="size-5" />
                 </span>
                 <h3 className="mt-4 flex items-center gap-2 font-bold">
                   {title}
-                  <ArrowRight className="size-4 text-[#176b67] transition group-hover:translate-x-1" />
+                  <ArrowRight className="size-4 text-primary transition group-hover:translate-x-1" />
                 </h3>
-                <p className="mt-2 text-sm leading-6 text-[#66777a]">{desc}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{desc}</p>
               </Link>
             ))}
           </div>
         </section>
       </main>
-      <footer className="border-t border-[#dfe8e5] bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-7 text-sm text-[#66777a] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <footer className="border-t border-border bg-card">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-7 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <Logo />
           <p>Rwanda-first parking network · Kigali</p>
           <p>ParkShare · 2026</p>

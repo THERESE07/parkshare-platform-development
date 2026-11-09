@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, CalendarDays, Car, Clock, MapPin, Search, Ticket } from "lucide-react";
-import { eventApi, parkingApi, reservationApi } from "../../lib/api";
+import { eventApi, lotsById, parkingApi, reservationApi } from "../../api";
 import { formatDateTime, formatRwf, formatTime } from "../../lib/format";
+import { distanceKm, hasLocation, useGeolocation } from "../../lib/geo";
 import { useSession } from "../../lib/session";
 import { useLoad } from "../../lib/useLoad";
 import { ButtonLink, Card, SectionHeading } from "../../components/ui";
@@ -9,25 +10,32 @@ import { LotCardCompact, ReservationStatusPill } from "../../components/parking"
 
 export default function DriverHome() {
   const user = useSession()!;
+  const geo = useGeolocation(true);
   const { data } = useLoad(async () => {
     const [reservations, lots, events] = await Promise.all([
       reservationApi.listByUser(user.userId).catch(() => []),
-      parkingApi.list().catch(() => []),
+      parkingApi.listActive().catch(() => []),
       eventApi.list().catch(() => []),
     ]);
-    return { reservations, lots, events };
+    const names = await lotsById(reservations.map((r) => r.parkingLotId));
+    return { reservations, lots, events, names };
   }, [user.userId]);
 
   const reservations = data?.reservations ?? [];
-  const lots = data?.lots ?? [];
   const now = Date.now();
-  const lotName = (id: number) => lots.find((l) => l.id === id)?.name ?? `Parking lot #${id}`;
+  const lotName = (id: number) => data?.names.get(id)?.name ?? `Parking lot #${id}`;
 
   const active = reservations.find((r) => r.status === "CHECKED_IN");
   const upcoming = reservations
     .filter((r) => ["PENDING", "CONFIRMED"].includes(r.status) && new Date(r.endTime).getTime() > now)
     .sort((a, b) => a.startTime.localeCompare(b.startTime))[0];
-  const nearby = lots.filter((l) => l.status?.toUpperCase() === "ACTIVE").slice(0, 4);
+  const nearby = (data?.lots ?? [])
+    .map((lot) => ({
+      lot,
+      distance: geo.position && hasLocation(lot) ? distanceKm(geo.position, { lat: lot.latitude, lng: lot.longitude }) : null,
+    }))
+    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+    .slice(0, 4);
   const event = (data?.events ?? [])
     .filter((e) => new Date(e.endTime).getTime() > now)
     .sort((a, b) => a.startTime.localeCompare(b.startTime))[0];
@@ -119,7 +127,7 @@ export default function DriverHome() {
 
       <section>
         <SectionHeading
-          title="Open parking"
+          title={geo.position ? "Parking near you" : "Open parking"}
           action={
             <Link to="/driver/find" className="text-sm font-medium text-primary hover:underline">
               See all
@@ -129,8 +137,8 @@ export default function DriverHome() {
         />
         {nearby.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {nearby.map((lot) => (
-              <LotCardCompact key={lot.id} lot={lot} />
+            {nearby.map(({ lot, distance }) => (
+              <LotCardCompact key={lot.id} lot={lot} distance={distance} />
             ))}
           </div>
         ) : (

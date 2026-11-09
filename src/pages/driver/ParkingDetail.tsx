@@ -1,8 +1,9 @@
 import { useParams } from "react-router-dom";
 import { Clock, MapPin, Phone, ShieldCheck, Star } from "lucide-react";
-import { loadLotLayout, parkingApi, pricingApi } from "../../lib/api";
-import { formatRwf } from "../../lib/format";
+import { loadLotLayout, parkingApi, pricingApi } from "../../api";
+import { CANCEL_POLICY, formatRwf } from "../../lib/format";
 import { useLoad } from "../../lib/useLoad";
+import { Directions } from "../../components/directions";
 import { Alert, BackLink, ButtonLink, Card, Loading, OccupancyBar } from "../../components/ui";
 import { LotStatusPill } from "../../components/parking";
 
@@ -108,6 +109,8 @@ export default function ParkingDetail() {
             )}
           </Card>
 
+          <Directions lot={lot} />
+
           {sortedHours.length > 0 && (
             <Card className="p-4">
               <h2 className="flex items-center gap-2 font-sans font-semibold tracking-normal">
@@ -198,8 +201,7 @@ export default function ParkingDetail() {
             </dl>
 
             <p className="mt-3 text-xs leading-5 text-muted-foreground">
-              You'll see the exact price, including 18% VAT, before you confirm. Cancel 60+ minutes before your start
-              time for a full refund.
+              You'll see the exact price from ParkShare before you confirm. {CANCEL_POLICY}
             </p>
 
             {open ? (

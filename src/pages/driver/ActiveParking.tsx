@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Car, Clock, MapPin, Timer } from "lucide-react";
-import { parkingApi, reservationApi } from "../../lib/api";
+import { parkingApi, reservationApi } from "../../api";
 import { formatDateTime, formatRwf, formatTime } from "../../lib/format";
 import { useSession } from "../../lib/session";
 import { useLoad } from "../../lib/useLoad";

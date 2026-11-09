@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown, LoaderCircle, MapPinned, Plus } from "lucide-react";
 import {
@@ -7,15 +7,18 @@ import {
   parkingSpaceApi,
   parkingZoneApi,
   pricingApi,
+  type OperatorPreview,
   type ParkingSpace,
   type SpaceStatus,
   type SpaceType,
-} from "../../lib/api";
+} from "../../api";
 import { SPACE_STATUS_META, errorMessage, formatRwf } from "../../lib/format";
 import { useSession } from "../../lib/session";
 import { useLoad } from "../../lib/useLoad";
 import { Alert, Card, EmptyState, Field, Input, Loading, OccupancyBar, PageHeader, Select, Textarea, buttonClass, cn } from "../../components/ui";
 import { LotStatusPill } from "../../components/parking";
+import { LocationPicker } from "../../components/map";
+import type { LatLng } from "../../lib/geo";
 import { inUse, loadOperatorLots, type OperatorLot } from "./data";
 
 const SPACE_TYPES: SpaceType[] = ["STANDARD", "DISABLED", "EV", "VIP", "MOTORCYCLE"];
@@ -86,6 +89,7 @@ function NewLotForm({ operatorId, onCreated }: { operatorId: number; onCreated: 
   const [city, setCity] = useState("Kigali");
   const [description, setDescription] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [location, setLocation] = useState<LatLng | null>(null);
   const [capacity, setCapacity] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +107,8 @@ function NewLotForm({ operatorId, onCreated }: { operatorId: number; onCreated: 
         description: description.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
         totalCapacity: capacity ? Number(capacity) : undefined,
+        latitude: location?.lat,
+        longitude: location?.lng,
       });
       await onCreated(created.id);
     } catch (cause) {
@@ -149,6 +155,17 @@ function NewLotForm({ operatorId, onCreated }: { operatorId: number; onCreated: 
         <Field label="Total capacity" htmlFor="lotCapacity" optional>
           <Input id="lotCapacity" type="number" min="1" step="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
         </Field>
+        <div className="space-y-1.5 sm:col-span-2">
+          <p className="text-sm font-semibold">
+            Location on the map <span className="font-normal text-muted-foreground">(recommended)</span>
+          </p>
+          <LocationPicker value={location} onChange={setLocation} className="h-64" />
+          <p className="text-xs text-muted-foreground">
+            {location
+              ? `Pinned at ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}. Drag the pin to adjust.`
+              : "Tap the entrance of your lot so drivers can navigate to it. Must be inside Rwanda."}
+          </p>
+        </div>
         <Field label="Description" htmlFor="lotDescription" optional className="sm:col-span-2">
           <Textarea id="lotDescription" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
@@ -376,7 +393,7 @@ function RateForm({ lotId, current, onChanged }: { lotId: number; current: numbe
   return (
     <MiniForm
       title="Hourly rate"
-      submitLabel={current ? "Add new rate" : "Set rate"}
+      submitLabel={current ? "Save new rate" : "Set rate"}
       busy={busy}
       error={error}
       onSubmit={() =>
@@ -387,11 +404,12 @@ function RateForm({ lotId, current, onChanged }: { lotId: number; current: numbe
             amount: Number(amount),
             currency: "RWF",
             active: true,
+            effectiveFrom: new Date().toISOString(),
           }),
         )
       }
     >
-      <Field label="RWF per hour" htmlFor={`rate-${lotId}`} hint="Up to 2,000 RWF/hour. Prices include VAT.">
+      <Field label="RWF per hour" htmlFor={`rate-${lotId}`} hint="Up to 2,000 RWF/hour. ParkShare calculates what drivers pay.">
         <Input
           id={`rate-${lotId}`}
           required
@@ -403,7 +421,58 @@ function RateForm({ lotId, current, onChanged }: { lotId: number; current: numbe
           onChange={(e) => setAmount(e.target.value)}
         />
       </Field>
+      <EarningsPreview lotId={lotId} hourlyRate={Number(amount) || undefined} />
     </MiniForm>
+  );
+}
+
+/** What the operator receives at the typed rate, straight from the API (guide §10). */
+function EarningsPreview({ lotId, hourlyRate }: { lotId: number; hourlyRate?: number }) {
+  const [preview, setPreview] = useState<OperatorPreview | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const t = window.setTimeout(() => {
+      pricingApi
+        .operatorPreview(lotId, hourlyRate)
+        .then((p) => active && (setPreview(p), setError("")))
+        .catch((cause) => active && setError(errorMessage(cause, "Preview unavailable.")));
+    }, 400);
+    return () => {
+      active = false;
+      window.clearTimeout(t);
+    };
+  }, [lotId, hourlyRate]);
+
+  if (error) return <p className="whitespace-pre-line text-xs text-muted-foreground">{error}</p>;
+  if (!preview) return <p className="text-xs text-muted-foreground">Calculating your earnings…</p>;
+  return (
+    <div className="rounded-lg border border-border bg-card p-2.5 text-xs">
+      <p className="mb-1.5 font-semibold">What you'd earn{preview.basedOn ? ` (${preview.basedOn})` : ""}</p>
+      <table className="w-full tabular-nums">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="font-medium">Stay</th>
+            <th className="text-right font-medium">Driver pays</th>
+            <th className="text-right font-medium">You get</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(preview.examples ?? []).map((ex) => (
+            <tr key={ex.stay}>
+              <td>{ex.stay}</td>
+              <td className="text-right">{formatRwf(ex.driverPays)}</td>
+              <td className="text-right font-semibold">{formatRwf(ex.yourNetIncome ?? ex.youReceive)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(preview.notes ?? []).map((n) => (
+        <p key={n} className="mt-1.5 text-muted-foreground">
+          {n}
+        </p>
+      ))}
+    </div>
   );
 }
 

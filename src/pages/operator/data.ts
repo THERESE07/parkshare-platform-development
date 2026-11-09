@@ -8,7 +8,7 @@ import {
   type ParkingZone,
   type PricingRule,
   type Reservation,
-} from "../../lib/api";
+} from "../../api";
 
 export type OperatorLot = {
   lot: ParkingLot;

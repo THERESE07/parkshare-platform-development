@@ -6,6 +6,14 @@
     <meta name="theme-color" content="#176b67" />
     <meta name="description" content="ParkShare — know your parking, reserve it, arrive with confidence." />
     <title>ParkShare — Trusted parking in Rwanda</title>
+    <script>
+      // Apply the saved theme before first paint (no flash of the wrong theme).
+      try {
+        var t = localStorage.getItem("ps_theme");
+        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches))
+          document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

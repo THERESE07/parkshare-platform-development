@@ -1,5 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* `dark:` follows the .dark class on <html> (set by the theme switcher). */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Design tokens shared by every page (bg-primary, text-muted-foreground, …). */
 @theme {
@@ -36,6 +40,39 @@
   --color-info-muted: #eef6ff;
 }
 
+/* Dark theme: same token names, so every component adapts automatically. */
+.dark {
+  color-scheme: dark;
+  --color-background: #0f1719;
+  --color-foreground: #e4edeb;
+  --color-card: #172225;
+  --color-card-foreground: #e4edeb;
+  --color-primary: #3fb3a9;
+  --color-primary-dark: #5cc7bd;
+  --color-primary-foreground: #06201e;
+  --color-secondary: #1d2b2e;
+  --color-muted: #1d2a2d;
+  --color-muted-foreground: #95a8ab;
+  --color-accent: #173a37;
+  --color-accent-foreground: #7fd6cc;
+  --color-border: #2a3a3d;
+  --color-input: #34474a;
+  --color-ring: #3fb3a9;
+
+  --color-success: #3ccf7a;
+  --color-success-foreground: #04210f;
+  --color-success-muted: #10301f;
+  --color-warning: #f0b23e;
+  --color-warning-foreground: #f6cf7f;
+  --color-warning-muted: #33270e;
+  --color-destructive: #f47067;
+  --color-destructive-foreground: #2a0705;
+  --color-danger-muted: #3a1714;
+  --color-info: #6cb4f5;
+  --color-info-foreground: #071b2e;
+  --color-info-muted: #11263b;
+}
+
 :root {
   font-family: var(--font-sans);
   color: var(--color-foreground);
@@ -46,7 +83,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--color-background); }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--color-background); color: var(--color-foreground); }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }
@@ -55,3 +92,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline: 3px solid #7dc6be;
   outline-offset: 2px;
 }
+select option { background: var(--color-card); color: var(--color-foreground); }
+
+/* Map: match the app theme; tiles are darkened rather than swapped in dark mode. */
+.leaflet-container { font: inherit; background: var(--color-secondary); border-radius: inherit; }
+.dark .ps-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--color-card); color: var(--color-foreground); }
+.leaflet-control-attribution { font-size: 10px; }
+.dark .leaflet-control-attribution { background: rgb(23 34 37 / 0.8) !important; color: var(--color-muted-foreground); }
+.dark .leaflet-control-attribution a { color: var(--color-primary); }
+.dark .leaflet-bar a { background: var(--color-card); color: var(--color-foreground); border-color: var(--color-border); }
+.ps-pin { background: none; border: none; }

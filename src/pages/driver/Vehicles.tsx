@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { CarFront } from "lucide-react";
-import { vehicleApi, type VehicleType } from "../../lib/api";
+import { vehicleApi, type VehicleType } from "../../api";
 import { errorMessage } from "../../lib/format";
 import { useSession } from "../../lib/session";
 import { useLoad } from "../../lib/useLoad";

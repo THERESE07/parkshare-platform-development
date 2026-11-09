@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, CalendarDays, Check, Clock, MapPin, Ticket } from "lucide-react";
-import { eventApi, parkingApi, type EventParkingZone } from "../../lib/api";
-import { formatDate, formatRwf, formatTime } from "../../lib/format";
+import { eventApi, parkingApi, type EventParkingZone } from "../../api";
+import { BOOKING_RULES, formatDate, formatRwf, formatTime } from "../../lib/format";
 import { useLoad } from "../../lib/useLoad";
 import { Alert, BackLink, Card, EmptyState, Loading, OccupancyBar, PageHeader, Pill, cn } from "../../components/ui";
 
@@ -115,12 +115,12 @@ export function EventDetail() {
     if (!selected) return;
     // Arrive 30 minutes early; book until the event ends.
     const start = new Date(Math.max(new Date(event.startTime).getTime() - 30 * 60000, Date.now() + 10 * 60000));
-    const hours = Math.max(1, Math.ceil((new Date(event.endTime).getTime() - start.getTime()) / 3600000));
+    const minutes = Math.ceil((new Date(event.endTime).getTime() - start.getTime()) / 1_800_000) * 30;
     const params = new URLSearchParams({
       eventId: String(event.id),
       zoneId: String(selected.zone.id),
       start: start.toISOString(),
-      hours: String(hours),
+      minutes: String(Math.min(Math.max(minutes, BOOKING_RULES.minMinutes), BOOKING_RULES.maxMinutes)),
     });
     navigate(`/driver/parking/${selected.zone.parkingLotId}/reserve?${params}`);
   }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -8,15 +8,23 @@ import {
   ChevronLeft,
   Home,
   LayoutDashboard,
+  LoaderCircle,
   LogOut,
   MapPin,
   MapPinned,
+  Monitor,
+  Moon,
+  ScanLine,
+  ShieldCheck,
+  Sun,
   Ticket,
   User,
   type LucideIcon,
 } from "lucide-react";
-import { authApi, notificationApi } from "../lib/api";
-import { homeFor, initials, isOperator, useSession } from "../lib/session";
+import { WAKING_EVENT, authApi, isServerWaking, meApi, notificationApi, type Notification } from "../api";
+import { formatDateTime } from "../lib/format";
+import { canUseConsole, hasRole, homeFor, initials, isAdmin, isOperator, useSession } from "../lib/session";
+import { useTheme, type ThemeChoice } from "../lib/theme";
 import { cn, Logo } from "./ui";
 
 function useSignOut() {
@@ -38,6 +46,159 @@ function RequireSignIn({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/* ---------- Shared header pieces ---------- */
+
+const THEME_ORDER: ThemeChoice[] = ["system", "light", "dark"];
+const THEME_META: Record<ThemeChoice, { icon: LucideIcon; label: string }> = {
+  system: { icon: Monitor, label: "Theme: match device" },
+  light: { icon: Sun, label: "Theme: light" },
+  dark: { icon: Moon, label: "Theme: dark" },
+};
+
+export function ThemeToggle({ className }: { className?: string }) {
+  const { choice, set } = useTheme();
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(choice) + 1) % THEME_ORDER.length];
+  const { icon: Icon, label } = THEME_META[choice];
+  return (
+    <button
+      type="button"
+      onClick={() => set(next)}
+      aria-label={`${label}. Switch to ${next}.`}
+      title={label}
+      className={cn(
+        "grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        className,
+      )}
+    >
+      <Icon className="size-5" />
+    </button>
+  );
+}
+
+/** "Waking up the server…" while any request takes unusually long (free trial servers sleep). */
+function WakingBanner() {
+  const [waking, setWaking] = useState(isServerWaking());
+  useEffect(() => {
+    const sync = () => setWaking(isServerWaking());
+    window.addEventListener(WAKING_EVENT, sync);
+    return () => window.removeEventListener(WAKING_EVENT, sync);
+  }, []);
+  if (!waking) return null;
+  return (
+    <div role="status" className="fixed inset-x-0 top-0 z-[1000] flex justify-center p-2">
+      <span className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium shadow-lg">
+        <LoaderCircle className="size-4 animate-spin text-primary" />
+        Waking up the server… this can take up to a minute.
+      </span>
+    </div>
+  );
+}
+
+const NOTIFICATION_POLL_MS = 45_000;
+
+/** Bell with the user's notifications (paged API, polled; push isn't available yet). */
+function NotificationsBell({ userId }: { userId: number }) {
+  const [items, setItems] = useState<Notification[]>([]);
+  const [open, setOpen] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const unread = items.filter((n) => !n.readAt).length;
+
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      notificationApi
+        .list(userId)
+        .then((page) => active && setItems(page.content))
+        .catch(() => undefined);
+    void load();
+    const timer = window.setInterval(() => document.visibilityState === "visible" && load(), NOTIFICATION_POLL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !panel.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  async function markRead(n: Notification) {
+    if (n.readAt) return;
+    setItems((list) => list.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)));
+    await notificationApi.markRead(n.id).catch(() => undefined);
+  }
+
+  return (
+    <div className="relative" ref={panel}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={unread ? `${unread} unread notifications` : "Notifications"}
+        className="relative grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Bell className="size-5" />
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-card">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+          <p className="border-b border-border px-4 py-3 text-sm font-semibold">Notifications</p>
+          {items.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">You're all caught up.</p>
+          ) : (
+            <ul className="max-h-96 divide-y divide-border overflow-y-auto">
+              {items.map((n) => (
+                <li key={n.id}>
+                  <button
+                    type="button"
+                    onClick={() => markRead(n)}
+                    className={cn("block w-full px-4 py-3 text-left text-sm hover:bg-muted", !n.readAt && "bg-accent/50")}
+                  >
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="font-medium">{n.title || "ParkShare"}</span>
+                      {!n.readAt && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />}
+                    </span>
+                    {n.message && <span className="mt-0.5 block text-muted-foreground">{n.message}</span>}
+                    <span className="mt-1 block text-xs text-muted-foreground">{formatDateTime(n.createdAt)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Reminds signed-in users to confirm their phone/email codes (sent at registration). */
+function VerifyNudge() {
+  const [missing, setMissing] = useState<string[]>([]);
+  const location = useLocation();
+  useEffect(() => {
+    meApi
+      .get()
+      .then((me) => setMissing([!me.phoneVerified && "phone", !me.emailVerified && "email"].filter(Boolean) as string[]))
+      .catch(() => undefined);
+  }, [location.pathname]);
+  if (missing.length === 0 || location.pathname === "/verify") return null;
+  return (
+    <div className="border-b border-warning/30 bg-warning-muted px-4 py-2 text-center text-sm text-warning-foreground">
+      Please verify your {missing.join(" and ")}.{" "}
+      <Link to={`/verify?next=${encodeURIComponent(location.pathname)}`} className="font-semibold underline">
+        Enter your code
+      </Link>
+    </div>
+  );
+}
+
 /* ---------- Public site ---------- */
 
 export function PublicLayout() {
@@ -45,8 +206,9 @@ export function PublicLayout() {
   const signOut = useSignOut();
   return (
     <div className="min-h-screen bg-background">
+      <WakingBanner />
       <header className="sticky top-0 z-30 border-b border-border bg-card/90 backdrop-blur">
-        <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link to="/" aria-label="ParkShare home">
             <Logo />
           </Link>
@@ -64,7 +226,8 @@ export function PublicLayout() {
               Events
             </Link>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <ThemeToggle />
             {user ? (
               <>
                 <button
@@ -83,10 +246,7 @@ export function PublicLayout() {
               </>
             ) : (
               <>
-                <Link
-                  to="/login"
-                  className="rounded-xl px-3 py-2.5 text-sm font-semibold text-primary hover:bg-accent sm:px-4"
-                >
+                <Link to="/login" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-primary hover:bg-accent sm:px-4">
                   Sign in
                 </Link>
                 <Link
@@ -115,38 +275,13 @@ const driverNav: { to: string; label: string; icon: LucideIcon; end?: boolean }[
   { to: "/driver/profile", label: "Profile", icon: User },
 ];
 
-function UnreadBell({ userId }: { userId: number }) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    let active = true;
-    notificationApi
-      .unread(userId)
-      .then((list) => active && setCount(list.length))
-      .catch(() => active && setCount(0));
-    return () => {
-      active = false;
-    };
-  }, [userId]);
-  return (
-    <span
-      aria-label={count ? `${count} unread notifications` : "No unread notifications"}
-      title={count ? `${count} unread notifications` : "No unread notifications"}
-      className="relative grid size-9 place-items-center rounded-full text-muted-foreground"
-    >
-      <Bell className="size-5" />
-      {count > 0 && (
-        <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary ring-2 ring-card" />
-      )}
-    </span>
-  );
-}
-
 function DriverShell() {
   const user = useSession()!;
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
-      <header className="sticky top-0 z-40 border-b border-border bg-card/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+      <WakingBanner />
+      <header className="sticky top-0 z-[500] border-b border-border bg-card/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link to="/driver" aria-label="ParkShare driver home">
             <Logo size="sm" />
           </Link>
@@ -159,9 +294,7 @@ function DriverShell() {
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )
                 }
               >
@@ -170,33 +303,29 @@ function DriverShell() {
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-2">
-            {isOperator(user) && (
-              <Link
-                to="/operator"
-                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-accent sm:block"
-              >
-                Operator console
+          <div className="flex items-center gap-1">
+            {canUseConsole(user) && (
+              <Link to={homeFor(user)} className="hidden rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-accent sm:block">
+                Console
               </Link>
             )}
-            <UnreadBell userId={user.userId} />
+            <ThemeToggle />
+            <NotificationsBell userId={user.userId} />
             <Link
               to="/driver/profile"
               aria-label="Your profile"
-              className="grid size-9 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
+              className="ml-1 grid size-9 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
             >
               {initials(user.firstName, user.lastName)}
             </Link>
           </div>
         </div>
       </header>
+      <VerifyNudge />
       <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8">
         <Outlet />
       </main>
-      <nav
-        aria-label="Driver navigation"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur md:hidden"
-      >
+      <nav aria-label="Driver navigation" className="fixed inset-x-0 bottom-0 z-[500] border-t border-border bg-card/95 backdrop-blur md:hidden">
         <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]">
           {driverNav.map((item) => (
             <li key={item.to} className="flex-1">
@@ -229,38 +358,39 @@ export function DriverLayout() {
   );
 }
 
-/* ---------- Operator console ---------- */
+/* ---------- Operator / attendant / admin console ---------- */
 
-const operatorNav: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
-  { to: "/operator", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/operator/lots", label: "My lots", icon: MapPinned },
-  { to: "/operator/reservations", label: "Reservations", icon: CalendarClock },
+type ConsoleNav = { to: string; label: string; icon: LucideIcon; end?: boolean; show: (u: ReturnType<typeof useSession>) => boolean };
+const consoleNav: ConsoleNav[] = [
+  { to: "/operator", label: "Overview", icon: LayoutDashboard, end: true, show: isOperator },
+  { to: "/operator/lots", label: "My lots", icon: MapPinned, show: isOperator },
+  { to: "/operator/reservations", label: "Reservations", icon: CalendarClock, show: isOperator },
+  { to: "/operator/gate", label: "Gate", icon: ScanLine, show: canUseConsole },
+  { to: "/operator/admin", label: "Admin", icon: ShieldCheck, show: isAdmin },
 ];
 
-function OperatorShell() {
+function ConsoleShell() {
   const user = useSession()!;
   const signOut = useSignOut();
+  const location = useLocation();
   const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.email;
+  const nav = consoleNav.filter((item) => item.show(user));
+  const roleLabel = isAdmin(user) ? "Admin console" : hasRole(user, "OPERATOR") ? "Operator console" : "Gate console";
 
-  if (!isOperator(user)) {
+  if (!canUseConsole(user)) {
     return (
       <main className="grid min-h-screen place-items-center bg-background px-4">
         <div className="max-w-md rounded-2xl border border-border bg-card p-6 text-center">
           <Logo className="justify-center" />
-          <h1 className="mt-6 text-xl font-bold">Operator access only</h1>
+          <h1 className="mt-6 text-xl font-bold">Staff access only</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            You are signed in as {user.email}, which doesn't have the OPERATOR role. Create an operator account to
-            list parking, or continue as a driver.
+            You are signed in as {user.email}. The console is for parking operators, attendants and admins.
           </p>
           <div className="mt-5 flex justify-center gap-3">
             <Link to="/driver" className="rounded-xl border border-input px-4 py-2.5 text-sm font-semibold">
               Driver app
             </Link>
-            <button
-              type="button"
-              onClick={signOut}
-              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
-            >
+            <button type="button" onClick={signOut} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">
               Sign out
             </button>
           </div>
@@ -268,21 +398,27 @@ function OperatorShell() {
       </main>
     );
   }
+  // Attendants only have the gate.
+  if (!nav.some((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)))) {
+    return <Navigate to={nav[0].to} replace />;
+  }
 
   return (
     <div className="min-h-dvh bg-muted/60 lg:grid lg:grid-cols-[260px_1fr]">
+      <WakingBanner />
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-border bg-card lg:flex">
-        <div className="border-b border-border px-5 py-4">
-          <Link to="/operator" aria-label="Operator overview">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <Link to={homeFor(user)} aria-label="Console home">
             <Logo />
           </Link>
+          <ThemeToggle />
         </div>
         <div className="border-b border-border px-5 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Operator console</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{roleLabel}</p>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">{name}</p>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {operatorNav.map((item) => (
+          {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -290,9 +426,7 @@ function OperatorShell() {
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )
               }
             >
@@ -310,11 +444,9 @@ function OperatorShell() {
               <p className="truncate text-sm font-medium">{name}</p>
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
+            <NotificationsBell userId={user.userId} />
           </div>
-          <Link
-            to="/"
-            className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
+          <Link to="/" className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
             <ChevronLeft className="size-3.5" />
             Back to ParkShare
           </Link>
@@ -329,43 +461,47 @@ function OperatorShell() {
         </div>
       </aside>
 
-      <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-card/90 px-4 py-3 backdrop-blur lg:hidden">
-          <Link to="/operator">
+      <div className="flex min-h-dvh min-w-0 flex-col">
+        <header className="sticky top-0 z-[500] flex items-center justify-between border-b border-border bg-card/90 px-4 py-3 backdrop-blur lg:hidden">
+          <Link to={homeFor(user)}>
             <Logo size="sm" />
           </Link>
-          <button
-            type="button"
-            onClick={signOut}
-            aria-label="Sign out"
-            className="grid size-8 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
-          >
-            {initials(user.firstName, user.lastName)}
-          </button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <NotificationsBell userId={user.userId} />
+            <button
+              type="button"
+              onClick={signOut}
+              aria-label="Sign out"
+              className="ml-1 grid size-8 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+            >
+              {initials(user.firstName, user.lastName)}
+            </button>
+          </div>
         </header>
+        <VerifyNudge />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div className="mx-auto w-full max-w-6xl">
             <Outlet />
           </div>
         </main>
-        <nav className="sticky bottom-0 z-20 grid grid-flow-col border-t border-border bg-card/95 backdrop-blur lg:hidden">
-          {operatorNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  "flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground",
-                )
-              }
-            >
-              <item.icon className="size-5" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+        {nav.length > 1 && (
+          <nav className="sticky bottom-0 z-[500] grid grid-flow-col border-t border-border bg-card/95 backdrop-blur lg:hidden">
+            {nav.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn("flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors", isActive ? "text-primary" : "text-muted-foreground")
+                }
+              >
+                <item.icon className="size-5" />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </div>
     </div>
   );
@@ -374,7 +510,16 @@ function OperatorShell() {
 export function OperatorLayout() {
   return (
     <RequireSignIn>
-      <OperatorShell />
+      <ConsoleShell />
+    </RequireSignIn>
+  );
+}
+
+/** Pages that need a session but no app chrome (e.g. account verification). */
+export function SignedInLayout() {
+  return (
+    <RequireSignIn>
+      <Outlet />
     </RequireSignIn>
   );
 }

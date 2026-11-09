@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Check, CircleCheck, Clock, LoaderCircle, MapPin, Smartphone } from "lucide-react";
+import { Check, CircleCheck, Clock, FlaskConical, LoaderCircle, MapPin, Receipt, Smartphone, Sun } from "lucide-react";
 import {
   eventApi,
   loadLotLayout,
@@ -10,18 +10,33 @@ import {
   pricingApi,
   reservationApi,
   vehicleApi,
+  waitForPayment,
   type CurrentQr,
+  type ParkingSpace,
   type PaymentMethod,
   type PaymentView,
   type PriceQuote,
   type Reservation,
-} from "../../lib/api";
-import { errorMessage, formatDateTime, formatDuration, formatRwf, formatTime, durationMinutes, toLocalInput } from "../../lib/format";
+  type Vehicle,
+} from "../../api";
+import {
+  BOOKING_RULES,
+  PAYMENTS_SANDBOX,
+  countdown,
+  durationMinutes,
+  errorMessage,
+  formatDateTime,
+  formatDuration,
+  formatRwf,
+  networkFor,
+  toLocalInput,
+} from "../../lib/format";
 import { useSession } from "../../lib/session";
 import { useLoad } from "../../lib/useLoad";
 import { Alert, BackLink, ButtonLink, Card, Field, Input, Loading, QrPass, Select, Textarea, cn } from "../../components/ui";
 
-const DURATIONS = [1, 2, 3, 4, 6, 8, 12, 24];
+/** Durations in minutes, within the API's 30 min – 7 day rule. */
+const DURATIONS = [30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 4320, 10080];
 const steps = ["Details", "Payment", "Confirmed"] as const;
 const PAYMENTS: { id: PaymentMethod; label: string; hint: string }[] = [
   { id: "MTN_MOMO", label: "MTN MoMo", hint: "078 / 079 numbers" },
@@ -34,16 +49,21 @@ function localPhone(phone: string | null | undefined): string {
   const digits = phone.replace(/\D/g, "");
   return digits.startsWith("250") ? `0${digits.slice(3)}` : phone;
 }
-function methodForPhone(phone: string): PaymentMethod | null {
-  const d = phone.replace(/\D/g, "").replace(/^250/, "0");
-  if (/^07[89]/.test(d)) return "MTN_MOMO";
-  if (/^07[23]/.test(d)) return "AIRTEL_MONEY";
-  return null;
-}
 function defaultStart(): string {
   const d = new Date(Date.now() + 15 * 60000);
   d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0);
   return toLocalInput(d);
+}
+
+/** Re-renders every second; used for countdowns. */
+function useNow(active = true) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [active]);
+  return now;
 }
 
 export default function ReserveParking() {
@@ -53,7 +73,7 @@ export default function ReserveParking() {
   const resumeId = params.get("reservation");
   const eventId = params.get("eventId");
   const zoneId = params.get("zoneId");
-  const presetHours = Number(params.get("hours")) || 0;
+  const presetMinutes = Number(params.get("minutes")) || 0;
   const presetStart = params.get("start");
 
   const { data, loading, error: loadError } = useLoad(async () => {
@@ -89,7 +109,7 @@ export default function ReserveParking() {
     );
 
   const { lot } = data;
-  const resumedClosed = data.resumed && !["PENDING", "CONFIRMED", "CHECKED_IN"].includes(data.resumed.status);
+  const closed = reservation && !["PENDING", "CONFIRMED", "CHECKED_IN"].includes(reservation.status);
 
   return (
     <div className="mx-auto max-w-xl pb-10">
@@ -108,19 +128,17 @@ export default function ReserveParking() {
             >
               {i < step ? <Check className="size-4" /> : i + 1}
             </span>
-            <span className={cn("text-sm font-medium", i === step ? "text-foreground" : "text-muted-foreground")}>
-              {label}
-            </span>
+            <span className={cn("text-sm font-medium", i === step ? "text-foreground" : "text-muted-foreground")}>{label}</span>
             {i < steps.length - 1 && <span className="ml-auto hidden h-px flex-1 bg-border sm:block" />}
           </li>
         ))}
       </ol>
 
-      {resumedClosed ? (
+      {closed ? (
         <Alert tone="warning" title="This booking can't be paid any more">
-          Reservation {data.resumed!.reservationCode} is {data.resumed!.status.toLowerCase().replace("_", " ")}.{" "}
+          Reservation {reservation!.reservationCode} has {reservation!.status === "EXPIRED" ? "expired" : `status ${reservation!.status.toLowerCase()}`}.{" "}
           <Link to={`/driver/parking/${lot.id}/reserve`} className="font-semibold underline">
-            Make a new reservation
+            Book again
           </Link>
           .
         </Alert>
@@ -131,7 +149,7 @@ export default function ReserveParking() {
           vehicles={data.vehicles}
           spaces={data.layout.spaces.filter((s) => s.status?.toUpperCase() === "AVAILABLE")}
           presetStart={presetStart}
-          presetHours={presetHours}
+          presetMinutes={presetMinutes}
           onCreated={async (created) => {
             if (eventId && zoneId) {
               await eventApi.linkReservation(Number(eventId), Number(zoneId), created.id).catch(() => undefined);
@@ -143,11 +161,12 @@ export default function ReserveParking() {
       ) : step === 1 && reservation ? (
         <PaymentStep
           reservation={reservation}
-          defaultPhone={localPhone(data.profile?.phone)}
+          accountPhone={localPhone(data.profile?.phone)}
           onPaid={(updated) => {
             setReservation(updated);
             setStep(2);
           }}
+          onExpired={(updated) => setReservation(updated)}
         />
       ) : reservation ? (
         <ConfirmedStep reservation={reservation} lotName={lot.name} lotAddress={`${lot.address}, ${lot.city}`} />
@@ -164,15 +183,15 @@ function DetailsStep({
   vehicles,
   spaces,
   presetStart,
-  presetHours,
+  presetMinutes,
   onCreated,
 }: {
   lotId: number;
   lotOpen: boolean;
-  vehicles: { id: number; plateNumber: string; isDefault: boolean; vehicleType: string }[];
-  spaces: { id: number; spaceCode: string; floor: string | null; spaceType: string }[];
+  vehicles: Vehicle[];
+  spaces: ParkingSpace[];
   presetStart: string | null;
-  presetHours: number;
+  presetMinutes: number;
   onCreated: (r: Reservation) => Promise<void>;
 }) {
   const [vehicleId, setVehicleId] = useState(() => String((vehicles.find((v) => v.isDefault) ?? vehicles[0])?.id ?? ""));
@@ -181,22 +200,30 @@ function DetailsStep({
     const preset = presetStart ? new Date(presetStart) : null;
     return preset && preset.getTime() > Date.now() ? toLocalInput(preset) : defaultStart();
   });
-  const [hours, setHours] = useState(presetHours || 2);
+  const clampedPreset = presetMinutes ? Math.min(Math.max(presetMinutes, BOOKING_RULES.minMinutes), BOOKING_RULES.maxMinutes) : 0;
+  const [minutes, setMinutes] = useState(clampedPreset || 120);
   const [notes, setNotes] = useState("");
   const [quote, setQuote] = useState<PriceQuote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const durations = useMemo(() => [...new Set([...DURATIONS, hours])].sort((a, b) => a - b), [hours]);
+  const durations = useMemo(() => [...new Set([...DURATIONS, minutes])].sort((a, b) => a - b), [minutes]);
   const start = new Date(startLocal);
-  const end = new Date(start.getTime() + hours * 3600000);
-  const validTimes = Number.isFinite(start.getTime()) && start.getTime() > Date.now();
+  const end = new Date(start.getTime() + minutes * 60000);
+  const latestStart = new Date(Date.now() + BOOKING_RULES.maxDaysAhead * 86400000);
+  const timeProblem = !Number.isFinite(start.getTime())
+    ? "Choose a start time."
+    : start.getTime() <= Date.now()
+      ? "The start time can't be in the past."
+      : start > latestStart
+        ? `You can book at most ${BOOKING_RULES.maxDaysAhead} days ahead.`
+        : null;
 
   useEffect(() => {
     setQuote(null);
     setQuoteError("");
-    if (!validTimes) return;
+    if (timeProblem) return;
     let active = true;
     const timer = window.setTimeout(() => {
       pricingApi
@@ -209,12 +236,12 @@ function DetailsStep({
       window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lotId, startLocal, hours]);
+  }, [lotId, startLocal, minutes]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!validTimes) {
-      setError("Choose a start time in the future.");
+    if (timeProblem) {
+      setError(timeProblem);
       return;
     }
     setSaving(true);
@@ -239,7 +266,7 @@ function DetailsStep({
   if (!lotOpen)
     return (
       <Alert tone="warning" title="This lot is not open for booking">
-        The operator's lot hasn't been approved or is temporarily closed.
+        The lot hasn't been approved yet or is temporarily closed.
       </Alert>
     );
 
@@ -247,21 +274,22 @@ function DetailsStep({
     <form onSubmit={submit} className="space-y-4">
       <Card className="space-y-4 p-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Arrival" htmlFor="arrival">
+          <Field label="Arrival" htmlFor="arrival" hint={timeProblem && startLocal ? timeProblem : undefined}>
             <Input
               id="arrival"
               type="datetime-local"
               required
               min={toLocalInput(new Date())}
+              max={toLocalInput(latestStart)}
               value={startLocal}
               onChange={(e) => setStartLocal(e.target.value)}
             />
           </Field>
-          <Field label="Duration" htmlFor="duration" hint={validTimes ? `Until ${formatDateTime(end.toISOString())}` : undefined}>
-            <Select id="duration" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+          <Field label="Duration" htmlFor="duration" hint={!timeProblem ? `Until ${formatDateTime(end.toISOString())}` : undefined}>
+            <Select id="duration" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
               {durations.map((d) => (
                 <option key={d} value={d}>
-                  {d} {d === 1 ? "hour" : "hours"}
+                  {formatDuration(d)}
                 </option>
               ))}
             </Select>
@@ -311,84 +339,69 @@ function DetailsStep({
         </Field>
 
         <Field label="Notes for the operator" htmlFor="notes" optional>
-          <Textarea
-            id="notes"
-            rows={2}
-            maxLength={500}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Arrival details or accessibility needs"
-          />
+          <Textarea id="notes" rows={2} maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Arrival details or accessibility needs" />
         </Field>
       </Card>
 
-      <PriceSummary quote={quote} error={quoteError} startLocal={startLocal} hours={hours} />
+      <PriceSummary quote={quote} error={quoteError} pending={!timeProblem} />
 
       {error && <Alert>{error}</Alert>}
 
       <button
         type="submit"
-        disabled={saving || vehicles.length === 0 || !validTimes}
+        disabled={saving || vehicles.length === 0 || !!timeProblem || !quote}
         className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving && <LoaderCircle className="size-4 animate-spin" />}
-        {saving ? "Reserving…" : "Reserve & continue to payment"}
+        {saving ? "Reserving…" : quote ? `Reserve · ${formatRwf(quote.total)}` : "Reserve & continue to payment"}
       </button>
-      <p className="text-center text-xs text-muted-foreground">
-        Your space is held for a short time while you pay.
-      </p>
+      <p className="text-center text-xs text-muted-foreground">Your space is held for 15 minutes while you pay.</p>
     </form>
   );
 }
 
-function PriceSummary({
-  quote,
-  error,
-  startLocal,
-  hours,
-}: {
-  quote: PriceQuote | null;
-  error: string;
-  startLocal: string;
-  hours: number;
-}) {
+/** Shows the server's quote exactly: total big, then the lines and the note (guide §9). */
+function PriceSummary({ quote, error, pending }: { quote: PriceQuote | null; error: string; pending: boolean }) {
   return (
     <Card className="p-4">
-      <dl className="space-y-2 text-sm">
-        {quote ? (
-          quote.lines.map((line, i) => (
+      <div className="flex items-end justify-between gap-3">
+        <span className="text-sm font-semibold">Total to pay</span>
+        <span className="font-display text-3xl font-bold tabular-nums">
+          {quote ? formatRwf(quote.total) : error ? "—" : pending ? <LoaderCircle className="size-6 animate-spin text-muted-foreground" /> : "—"}
+        </span>
+      </div>
+      {quote && (
+        <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
+          {(quote.lines ?? []).map((line, i) => (
             <div key={i} className="flex justify-between gap-3">
               <dt className="text-muted-foreground">{line.label}</dt>
               <dd className="font-medium tabular-nums">{formatRwf(line.amount)}</dd>
             </div>
-          ))
-        ) : (
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">
-              {hours} {hours === 1 ? "hour" : "hours"} from {startLocal.replace("T", " ")}
-            </dt>
-            <dd className="text-muted-foreground">{error ? "—" : "Calculating…"}</dd>
-          </div>
-        )}
-        {quote?.dailyCapDiscount ? (
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Daily cap</dt>
-            <dd className="font-medium tabular-nums text-success">−{formatRwf(quote.dailyCapDiscount)}</dd>
-          </div>
-        ) : null}
-        <div className="flex justify-between border-t border-border pt-2 text-base">
-          <dt className="font-semibold">Total</dt>
-          <dd className="font-display font-bold tabular-nums">{quote ? formatRwf(quote.total) : "—"}</dd>
-        </div>
-        {quote && (
-          <p className="text-xs text-muted-foreground">
-            Includes {formatRwf(quote.vatAmount)} VAT ({Math.round(quote.vatRate * 100)}%) · billed for{" "}
-            {formatDuration(quote.billedMinutes)}
-          </p>
-        )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </dl>
+          ))}
+          {quote.dailyCapDiscount ? (
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Daily cap</dt>
+              <dd className="font-medium tabular-nums text-success">−{formatRwf(quote.dailyCapDiscount)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      )}
+      {quote?.note && <p className="mt-2 text-xs text-muted-foreground">{quote.note}</p>}
+      {error && <p className="mt-2 whitespace-pre-line text-xs text-destructive">{error}</p>}
     </Card>
+  );
+}
+
+function SandboxNotice() {
+  if (!PAYMENTS_SANDBOX) return null;
+  return (
+    <p className="flex items-start gap-2 rounded-xl border border-info/20 bg-info-muted p-3 text-xs leading-5 text-info">
+      <FlaskConical className="mt-0.5 size-4 shrink-0" />
+      <span>
+        <strong>Test mode: no real money.</strong> The test phone approves automatically after a few seconds. Use a number ending in 000
+        to test a declined payment, or 999 for no answer.
+      </span>
+    </p>
   );
 }
 
@@ -396,55 +409,53 @@ function PriceSummary({
 
 function PaymentStep({
   reservation,
-  defaultPhone,
+  accountPhone,
   onPaid,
+  onExpired,
 }: {
   reservation: Reservation;
-  defaultPhone: string;
+  accountPhone: string;
   onPaid: (r: Reservation) => void;
+  onExpired: (r: Reservation) => void;
 }) {
-  const [phone, setPhone] = useState(defaultPhone);
-  const [method, setMethod] = useState<PaymentMethod>(methodForPhone(defaultPhone) ?? "MTN_MOMO");
+  const [phone, setPhone] = useState(accountPhone);
+  const [method, setMethod] = useState<PaymentMethod>(networkFor(accountPhone) ?? "MTN_MOMO");
   const [payment, setPayment] = useState<PaymentView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const phoneMethod = methodForPhone(phone);
-  const phoneValid = phoneMethod !== null && phone.replace(/\D/g, "").replace(/^250/, "0").length === 10;
-  const mismatch = phoneValid && phoneMethod !== method;
-  const onPaidRef = useRef(onPaid);
-  onPaidRef.current = onPaid;
+  const now = useNow();
+  const dueMs = reservation.paymentDueBy ? new Date(reservation.paymentDueBy).getTime() - now : null;
+  const expired = dueMs !== null && dueMs <= 0;
 
-  // While a prompt is pending, poll until the provider answers.
+  const phoneNetwork = networkFor(phone);
+  const phoneValid = phoneNetwork !== null && phone.replace(/\D/g, "").replace(/^250/, "0").length === 10;
+  const mismatch = phoneValid && phoneNetwork !== method;
+
+  // Poll until paid / failed / expired (guide §9).
   useEffect(() => {
     if (!payment) return;
-    let active = true;
-    const timer = window.setInterval(async () => {
-      try {
-        const latest = await paymentApi.getForReservation(reservation.id);
-        if (!active) return;
-        const status = latest.status?.toUpperCase();
-        if (status === "PAID") {
-          active = false;
-          onPaidRef.current(await reservationApi.get(reservation.id));
-        } else if (status === "FAILED" || status === "CANCELLED") {
-          setPayment(null);
-          setError("The payment was declined or cancelled. Check your balance and try again.");
-        }
-      } catch {
-        /* keep polling */
+    let cancelled = false;
+    void waitForPayment(reservation.id, reservation.paymentDueBy, () => cancelled).then(async (result) => {
+      if (cancelled) return;
+      if (result === "paid") onPaid(await reservationApi.get(reservation.id));
+      else if (result === "failed") {
+        setPayment(null);
+        setError("The payment was declined or cancelled on the phone. Check your balance and try again.");
+      } else if (result === "expired") {
+        onExpired(await reservationApi.get(reservation.id).catch(() => ({ ...reservation, status: "EXPIRED" })));
       }
-    }, 2500);
+    });
     return () => {
-      active = false;
-      window.clearInterval(timer);
+      cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment, reservation.id]);
 
   async function pay() {
     setBusy(true);
     setError("");
     try {
-      const view = await paymentApi.initiate(reservation.id, { method, phone: phone.replace(/[\s-]/g, "") });
+      const view = await paymentApi.initiate(reservation.id, method, phone.replace(/[\s-]/g, "") || undefined);
       if (view.status?.toUpperCase() === "PAID") onPaid(await reservationApi.get(reservation.id));
       else setPayment(view);
     } catch (cause) {
@@ -454,6 +465,17 @@ function PaymentStep({
     }
   }
 
+  if (expired && !payment) {
+    return (
+      <Alert tone="warning" title="Time's up">
+        The 15-minute hold on reservation {reservation.reservationCode} has ended and the space was released.{" "}
+        <Link to={`/driver/parking/${reservation.parkingLotId}/reserve`} className="font-semibold underline">
+          Book again
+        </Link>
+      </Alert>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <Card className="p-4 text-sm">
@@ -461,18 +483,25 @@ function PaymentStep({
           <span className="text-muted-foreground">Reservation</span>
           <span className="font-mono font-semibold">{reservation.reservationCode}</span>
         </div>
-        <div className="mt-2 flex items-center justify-between">
+        <div className="mt-2 flex items-center justify-between gap-3">
           <span className="text-muted-foreground">
             {formatDateTime(reservation.startTime)} · {formatDuration(durationMinutes(reservation))}
           </span>
-          <span className="font-display text-lg font-bold">{formatRwf(reservation.totalAmount)}</span>
+          <span className="font-display text-2xl font-bold">{formatRwf(reservation.totalAmount)}</span>
         </div>
-        {reservation.paymentDueBy && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-warning-foreground">
-            <Clock className="size-3.5" /> Pay by {formatTime(reservation.paymentDueBy)} or the hold is released.
+        {dueMs !== null && (
+          <p
+            className={cn(
+              "mt-3 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium",
+              dueMs < 3 * 60000 ? "bg-danger-muted text-destructive" : "bg-warning-muted text-warning-foreground",
+            )}
+          >
+            <Clock className="size-3.5" /> Pay within <span className="font-mono tabular-nums">{countdown(dueMs)}</span> or the space is released.
           </p>
         )}
       </Card>
+
+      <SandboxNotice />
 
       {payment ? (
         <Card className="p-6 text-center">
@@ -492,10 +521,7 @@ function PaymentStep({
                 key={p.id}
                 type="button"
                 onClick={() => setMethod(p.id)}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl border p-3 text-left transition-colors",
-                  method === p.id ? "border-primary bg-accent" : "border-border hover:bg-muted",
-                )}
+                className={cn("flex items-center gap-3 rounded-xl border p-3 text-left transition-colors", method === p.id ? "border-primary bg-accent" : "border-border hover:bg-muted")}
               >
                 <span className="grid size-10 place-items-center rounded-lg bg-card text-foreground shadow-sm">
                   <Smartphone className="size-5" />
@@ -518,7 +544,11 @@ function PaymentStep({
           <Field
             label="Mobile money number"
             htmlFor="payPhone"
-            hint={mismatch ? `That looks like an ${phoneMethod === "MTN_MOMO" ? "MTN" : "Airtel"} number.` : "You'll get a prompt to approve the payment."}
+            hint={
+              mismatch
+                ? `That's an ${phoneNetwork === "MTN_MOMO" ? "MTN" : "Airtel"} number — pick ${phoneNetwork === "MTN_MOMO" ? "MTN MoMo" : "Airtel Money"} or use another number.`
+                : "Defaults to your account number. You'll get a prompt to approve the payment."
+            }
           >
             <Input
               id="payPhone"
@@ -527,8 +557,8 @@ function PaymentStep({
               value={phone}
               onChange={(e) => {
                 setPhone(e.target.value);
-                const m = methodForPhone(e.target.value);
-                if (m) setMethod(m);
+                const n = networkFor(e.target.value);
+                if (n) setMethod(n);
               }}
               placeholder="078 000 0000"
             />
@@ -560,15 +590,7 @@ function PaymentStep({
 
 /* ---------- Step 3: confirmed ---------- */
 
-function ConfirmedStep({
-  reservation,
-  lotName,
-  lotAddress,
-}: {
-  reservation: Reservation;
-  lotName: string;
-  lotAddress: string;
-}) {
+function ConfirmedStep({ reservation, lotName, lotAddress }: { reservation: Reservation; lotName: string; lotAddress: string }) {
   const [qr, setQr] = useState<CurrentQr | null>(null);
   const [qrError, setQrError] = useState("");
   useEffect(() => {
@@ -584,13 +606,16 @@ function ConfirmedStep({
         <div className="mx-auto grid size-14 place-items-center rounded-full bg-success-muted text-success">
           <CircleCheck className="size-8" />
         </div>
-        <h1 className="mt-4 text-xl font-bold">Reservation confirmed</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Paid {formatRwf(reservation.totalAmount)}. Show this pass at the entrance.
-        </p>
+        <h1 className="mt-4 text-xl font-bold">Paid · reservation confirmed</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Show this pass at the entrance.</p>
 
         {qr ? (
-          <QrPass value={qr.token} className="mt-6" />
+          <>
+            <QrPass value={qr.token} className="mt-6" />
+            <p className="mt-2 flex items-center justify-center gap-1 text-xs text-muted-foreground">
+              <Sun className="size-3.5" /> Turn your screen brightness up at the gate.
+            </p>
+          </>
         ) : (
           <p className="mx-auto mt-6 max-w-xs rounded-xl bg-muted p-4 text-xs text-muted-foreground">
             {qrError || "Loading your QR pass…"} The attendant can also check you in with the code below.
@@ -603,14 +628,18 @@ function ConfirmedStep({
           <Row icon={<MapPin className="size-4" />} label={lotName} value={lotAddress} />
           <Row icon={<Clock className="size-4" />} label="Arrival" value={formatDateTime(reservation.startTime)} />
           <Row label="Until" value={formatDateTime(reservation.endTime)} />
+          <Row label="Paid" value={formatRwf(reservation.totalAmount)} />
         </dl>
       </Card>
-      <div className="flex gap-3">
-        <ButtonLink to="/driver/bookings" variant="outline" size="lg" className="flex-1">
-          My bookings
+      <div className="grid grid-cols-2 gap-3">
+        <ButtonLink to={`/driver/bookings/${reservation.id}/receipt`} variant="outline" size="lg">
+          <Receipt className="size-4" /> Receipt
         </ButtonLink>
-        <ButtonLink to="/driver" size="lg" className="flex-1">
-          Done
+        <ButtonLink to={`/driver/parking/${reservation.parkingLotId}`} variant="outline" size="lg">
+          <MapPin className="size-4" /> Directions
+        </ButtonLink>
+        <ButtonLink to="/driver/bookings" size="lg" className="col-span-2">
+          My bookings
         </ButtonLink>
       </div>
     </div>

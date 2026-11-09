@@ -281,7 +281,7 @@ export function Alert({
     <div
       role={tone === "danger" || tone === "warning" ? "alert" : "status"}
       className={cn(
-        "rounded-xl border p-4 text-sm leading-6",
+        "whitespace-pre-line rounded-xl border p-4 text-sm leading-6",
         tone === "danger" && "border-destructive/20 bg-danger-muted text-destructive",
         tone === "warning" && "border-warning/30 bg-warning-muted text-warning-foreground",
         tone === "success" && "border-success/20 bg-success-muted text-success",
