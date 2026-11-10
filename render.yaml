@@ -1,0 +1,22 @@
+# Render Blueprint for the ParkShare web app (static site).
+# Render dashboard -> New -> Blueprint -> pick this repo.
+services:
+  - type: web
+    name: parkshare-web
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    staticPublishPath: ./dist
+    autoDeploy: true
+    envVars:
+      # VITE_* values are baked into the build: change them, then redeploy.
+      - key: VITE_API_URL
+        value: https://parkshare-api-a1ra.onrender.com
+      - key: VITE_PAYMENTS_SANDBOX
+        value: "true"
+      - key: NODE_VERSION
+        value: "20.19.0"
+    # Single-page app: let React Router handle every path (e.g. /driver/bookings on reload).
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
