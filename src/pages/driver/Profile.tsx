@@ -9,14 +9,20 @@ import { Alert, Card, Field, Input, Loading, Pill, buttonClass } from "../../com
 
 const PAID_STATUSES = ["CONFIRMED", "CHECKED_IN", "COMPLETED"];
 
-export default function Profile() {
+/**
+ * Account page. The driver app shows trips, vehicles and payment methods;
+ * the console (operators, attendants, admins) shows the account part only.
+ */
+export default function Profile({ variant = "driver" }: { variant?: "driver" | "console" }) {
   const user = useSession()!;
   const navigate = useNavigate();
+  const isDriver = variant === "driver";
+  const here = isDriver ? "/driver/profile" : "/operator/profile";
   const { data, setData, loading, error } = useLoad(async () => {
     const [profile, vehicles, reservations] = await Promise.all([
       meApi.get().catch(() => null),
-      vehicleApi.listByUser(user.userId).catch(() => []),
-      reservationApi.listByUser(user.userId).catch(() => []),
+      isDriver ? vehicleApi.listByUser(user.userId).catch(() => []) : Promise.resolve([]),
+      isDriver ? reservationApi.listByUser(user.userId).catch(() => []) : Promise.resolve([]),
     ]);
     return { profile, vehicles, reservations };
   }, [user.userId]);
@@ -69,10 +75,11 @@ export default function Profile() {
           </div>
         </div>
         {profile && (!profile.phoneVerified || !profile.emailVerified) && (
-          <Link to="/verify?next=/driver/profile" className={buttonClass("outline", "sm", "mt-4 w-full")}>
+          <Link to={`/verify?next=${here}`} className={buttonClass("outline", "sm", "mt-4 w-full")}>
             Verify your {!profile.phoneVerified && !profile.emailVerified ? "phone and email" : !profile.phoneVerified ? "phone" : "email"}
           </Link>
         )}
+        {isDriver && (
         <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-4 text-center">
           <div>
             <p className="font-display text-xl font-bold">{completed}</p>
@@ -87,6 +94,7 @@ export default function Profile() {
             <p className="text-xs text-muted-foreground">Vehicles</p>
           </div>
         </div>
+        )}
       </Card>
 
       <section>
@@ -113,6 +121,8 @@ export default function Profile() {
         </Card>
       </section>
 
+      {isDriver && (
+      <>
       <section>
         <h2 className="mb-2 font-sans text-sm font-semibold uppercase tracking-wide text-muted-foreground">My vehicles</h2>
         <Card className="divide-y divide-border">
@@ -159,11 +169,22 @@ export default function Profile() {
           ))}
         </Card>
       </section>
+      </>
+      )}
 
-      {canUseConsole(user) && (
-        <Link to={homeFor(user)} className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 text-sm font-medium hover:bg-muted">
+      {isDriver ? (
+        canUseConsole(user) && (
+          <Link to={homeFor(user)} className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 text-sm font-medium hover:bg-muted">
+            <span className="flex items-center gap-3">
+              <LayoutDashboard className="size-5 text-muted-foreground" /> Console
+            </span>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
+        )
+      ) : (
+        <Link to="/driver" className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 text-sm font-medium hover:bg-muted">
           <span className="flex items-center gap-3">
-            <LayoutDashboard className="size-5 text-muted-foreground" /> Console
+            <Car className="size-5 text-muted-foreground" /> Driver app (find and book parking)
           </span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>

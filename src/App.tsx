@@ -61,6 +61,7 @@ export default function App() {
         <Route path="reservations" element={<OperatorReservations />} />
         <Route path="gate" element={<Gate />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="profile" element={<Profile variant="console" />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

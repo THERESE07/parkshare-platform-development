@@ -359,6 +359,7 @@ export function VerifyPage() {
   }, []);
 
   const done = profile?.phoneVerified && profile?.emailVerified;
+  const oneVerified = !!(profile?.phoneVerified || profile?.emailVerified);
   useEffect(() => {
     if (done) {
       const t = window.setTimeout(() => navigate(next, { replace: true }), 1200);
@@ -381,10 +382,22 @@ export function VerifyPage() {
           </>
         )}
         {done && <Alert tone="success">All set! Taking you to ParkShare…</Alert>}
+        {!done && oneVerified && (
+          <Alert tone="success">
+            Your {profile?.phoneVerified ? "phone" : "email"} is verified, so you can book parking now. Verifying the other
+            one as well helps you recover your account.
+          </Alert>
+        )}
       </div>
-      <Link to={next} className="mt-6 block text-center text-sm font-medium text-muted-foreground hover:text-foreground">
-        {done ? "Continue" : "I'll do this later"}
-      </Link>
+      {oneVerified ? (
+        <Link to={next} className={buttonClass("primary", "md", "mt-6 w-full")}>
+          Continue
+        </Link>
+      ) : (
+        <Link to={next} className="mt-6 block text-center text-sm font-medium text-muted-foreground hover:text-foreground">
+          I'll do this later (you can't book until you verify)
+        </Link>
+      )}
     </AuthCard>
   );
 }

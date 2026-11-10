@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Check, CircleCheck, Clock, FlaskConical, LoaderCircle, MapPin, Receipt, Smartphone, Sun } from "lucide-react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { BadgeCheck, Check, CircleCheck, Clock, FlaskConical, LoaderCircle, MapPin, Receipt, Smartphone, Sun } from "lucide-react";
 import {
   eventApi,
   loadLotLayout,
@@ -69,6 +69,7 @@ function useNow(active = true) {
 export default function ReserveParking() {
   const lotId = Number(useParams().id);
   const [params] = useSearchParams();
+  const location = useLocation();
   const user = useSession()!;
   const resumeId = params.get("reservation");
   const eventId = params.get("eventId");
@@ -109,6 +110,8 @@ export default function ReserveParking() {
     );
 
   const { lot } = data;
+  // A verified phone or email is required before booking or paying.
+  const verified = !data.profile || !!(data.profile.phoneVerified || data.profile.emailVerified);
   const closed = reservation && !["PENDING", "CONFIRMED", "CHECKED_IN"].includes(reservation.status);
 
   return (
@@ -134,7 +137,25 @@ export default function ReserveParking() {
         ))}
       </ol>
 
-      {closed ? (
+      {!verified && step < 2 ? (
+        <Card className="p-6 text-center">
+          <div className="mx-auto grid size-12 place-items-center rounded-full bg-warning-muted text-warning-foreground">
+            <BadgeCheck className="size-6" />
+          </div>
+          <h1 className="mt-4 text-lg font-bold">Verify your account to book</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Before you reserve or pay, please confirm your phone number or your email with the 6-digit code we sent you. It
+            only takes a minute, and protects you and the parking operator.
+          </p>
+          <ButtonLink
+            to={`/verify?next=${encodeURIComponent(location.pathname + location.search)}`}
+            size="lg"
+            className="mt-5 w-full"
+          >
+            Verify now
+          </ButtonLink>
+        </Card>
+      ) : closed ? (
         <Alert tone="warning" title="This booking can't be paid any more">
           Reservation {reservation!.reservationCode} has {reservation!.status === "EXPIRED" ? "expired" : `status ${reservation!.status.toLowerCase()}`}.{" "}
           <Link to={`/driver/parking/${lot.id}/reserve`} className="font-semibold underline">

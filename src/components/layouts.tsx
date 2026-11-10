@@ -418,7 +418,8 @@ function ConsoleShell() {
     );
   }
   // Attendants only have the gate.
-  if (!nav.some((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)))) {
+  const onProfile = location.pathname.startsWith("/operator/profile");
+  if (!onProfile && !nav.some((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)))) {
     return <Navigate to={nav[0].to} replace />;
   }
 
@@ -455,14 +456,22 @@ function ConsoleShell() {
           ))}
         </nav>
         <div className="border-t border-border p-3">
-          <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-            <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-              {initials(user.firstName, user.lastName)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{name}</p>
-              <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-            </div>
+          <div className="flex items-center gap-2 rounded-xl px-1 py-1">
+            <NavLink
+              to="/operator/profile"
+              aria-label="Your profile"
+              className={({ isActive }) =>
+                cn("flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1 hover:bg-muted", isActive && "bg-accent")
+              }
+            >
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                {initials(user.firstName, user.lastName)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{name}</span>
+                <span className="block truncate text-xs text-muted-foreground">View profile</span>
+              </span>
+            </NavLink>
             <NotificationsBell userId={user.userId} />
           </div>
           <Link to="/" className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
@@ -488,14 +497,13 @@ function ConsoleShell() {
           <div className="flex items-center gap-1">
             <ThemeToggle />
             <NotificationsBell userId={user.userId} />
-            <button
-              type="button"
-              onClick={signOut}
-              aria-label="Sign out"
+            <Link
+              to="/operator/profile"
+              aria-label="Your profile"
               className="ml-1 grid size-8 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
             >
               {initials(user.firstName, user.lastName)}
-            </button>
+            </Link>
           </div>
         </header>
         <VerifyNudge />
