@@ -32,7 +32,7 @@ Set `VITE_API_URL=http://localhost:8080` (no `/api`) in `.env.local` for the loc
 
 Follows the backend's *Frontend Integration Guide*:
 
-- `src/api/client.ts` is the only place that calls `fetch`: it adds the Bearer token (kept in `localStorage`, 24 h), sends users to `/login` on `401`, turns error bodies into readable messages, and shows "Waking up the server…" when the trial server is slow.
+- `src/api/client.ts` is the only place that calls `fetch`: it adds the access token (30 min, memory only), renews it with the rotating refresh token (30 days, `localStorage` key `ps_refresh`) on a `401` and retries once, restores the session on start, sends users to `/login` when renewal fails, turns error bodies into readable messages, and shows "Waking up the server…" when the trial server is slow.
 - `src/api/schema.d.ts` is generated (`pnpm api:types`); `src/api/index.ts` derives every type from it and lists the endpoints.
 - Prices, VAT and fees always come from the API (`/api/pricing/quote`, reservation `totalAmount`).
 - Times are sent as ISO-8601 and shown in Kigali time.
@@ -40,7 +40,7 @@ Follows the backend's *Frontend Integration Guide*:
 ## Maps and dark mode
 
 - Maps use Leaflet with OpenStreetMap tiles (no API key). Driving routes come from the public OSRM demo router and are a preview only; "Google Maps" / "Waze" buttons hand off to the phone for live navigation. Override with `VITE_MAP_TILE_URL` / `VITE_ROUTING_URL` (the demo router and OSM tiles are not meant for heavy production traffic).
-- Theme follows the device by default; the sun/moon button switches light, dark or system.
+- Light is the standard theme; the moon/sun button switches to dark mode and back (remembered per browser).
 
 ## Integration notes
 

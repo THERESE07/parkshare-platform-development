@@ -11,7 +11,7 @@ type SortKey = "distance" | "name" | "capacity";
 
 export default function FindParking() {
   // Approved lots only: /parking-lots also returns lots awaiting approval (guide §9).
-  const { data: lots, loading, error } = useLoad(() => parkingApi.listActive());
+  const { data: lots, loading, error } = useLoad(() => parkingApi.list().then((lots) => lots.filter((l) => l.status?.toUpperCase() === "ACTIVE")));
   const geo = useGeolocation(true);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("distance");

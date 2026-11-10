@@ -12,7 +12,6 @@ import {
   LogOut,
   MapPin,
   MapPinned,
-  Monitor,
   Moon,
   ScanLine,
   ShieldCheck,
@@ -23,8 +22,8 @@ import {
 } from "lucide-react";
 import { WAKING_EVENT, authApi, isServerWaking, meApi, notificationApi, type Notification } from "../api";
 import { formatDateTime } from "../lib/format";
-import { canUseConsole, hasRole, homeFor, initials, isAdmin, isOperator, useSession } from "../lib/session";
-import { useTheme, type ThemeChoice } from "../lib/theme";
+import { canUseConsole, hasRole, homeFor, initials, isAdmin, isOperator, useSession, useSessionRestoring } from "../lib/session";
+import { useTheme } from "../lib/theme";
 import { cn, Logo } from "./ui";
 
 function useSignOut() {
@@ -38,7 +37,17 @@ function useSignOut() {
 /** Sends visitors to sign-in and brings them back afterwards. */
 function RequireSignIn({ children }: { children: React.ReactNode }) {
   const user = useSession();
+  const restoring = useSessionRestoring();
   const location = useLocation();
+  if (restoring) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <LoaderCircle className="size-4 animate-spin text-primary" /> Signing you in…
+        </span>
+      </div>
+    );
+  }
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
@@ -48,29 +57,23 @@ function RequireSignIn({ children }: { children: React.ReactNode }) {
 
 /* ---------- Shared header pieces ---------- */
 
-const THEME_ORDER: ThemeChoice[] = ["system", "light", "dark"];
-const THEME_META: Record<ThemeChoice, { icon: LucideIcon; label: string }> = {
-  system: { icon: Monitor, label: "Theme: match device" },
-  light: { icon: Sun, label: "Theme: light" },
-  dark: { icon: Moon, label: "Theme: dark" },
-};
-
+/** Switches between the standard light theme and dark mode. */
 export function ThemeToggle({ className }: { className?: string }) {
-  const { choice, set } = useTheme();
-  const next = THEME_ORDER[(THEME_ORDER.indexOf(choice) + 1) % THEME_ORDER.length];
-  const { icon: Icon, label } = THEME_META[choice];
+  const { isDark, toggle } = useTheme();
+  const label = isDark ? "Switch to light mode" : "Switch to dark mode";
   return (
     <button
       type="button"
-      onClick={() => set(next)}
-      aria-label={`${label}. Switch to ${next}.`}
+      onClick={toggle}
+      aria-label={label}
       title={label}
+      aria-pressed={isDark}
       className={cn(
         "grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         className,
       )}
     >
-      <Icon className="size-5" />
+      {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
     </button>
   );
 }
@@ -199,13 +202,25 @@ function VerifyNudge() {
   );
 }
 
+/** Site-wide footer. */
+export function SiteFooter({ className }: { className?: string }) {
+  return (
+    <footer className={cn("border-t border-border", className)}>
+      <div className="mx-auto max-w-6xl space-y-1 px-4 py-6 text-sm text-muted-foreground sm:px-6">
+        <p>© 2026 ParkShare. All rights reserved.</p>
+        <p>Kigali, Rwanda · Parking made simpler.</p>
+      </div>
+    </footer>
+  );
+}
+
 /* ---------- Public site ---------- */
 
 export function PublicLayout() {
   const user = useSession();
   const signOut = useSignOut();
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <WakingBanner />
       <header className="sticky top-0 z-30 border-b border-border bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
@@ -260,7 +275,10 @@ export function PublicLayout() {
           </div>
         </div>
       </header>
-      <Outlet />
+      <div className="flex-1">
+        <Outlet />
+      </div>
+      <SiteFooter className="bg-card" />
     </div>
   );
 }
@@ -278,7 +296,7 @@ const driverNav: { to: string; label: string; icon: LucideIcon; end?: boolean }[
 function DriverShell() {
   const user = useSession()!;
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-0">
+    <div className="flex min-h-screen flex-col bg-background pb-16 md:pb-0">
       <WakingBanner />
       <header className="sticky top-0 z-[500] border-b border-border bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
@@ -322,9 +340,10 @@ function DriverShell() {
         </div>
       </header>
       <VerifyNudge />
-      <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 sm:py-8">
         <Outlet />
       </main>
+      <SiteFooter />
       <nav aria-label="Driver navigation" className="fixed inset-x-0 bottom-0 z-[500] border-t border-border bg-card/95 backdrop-blur md:hidden">
         <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]">
           {driverNav.map((item) => (
@@ -485,6 +504,7 @@ function ConsoleShell() {
             <Outlet />
           </div>
         </main>
+        <SiteFooter />
         {nav.length > 1 && (
           <nav className="sticky bottom-0 z-[500] grid grid-flow-col border-t border-border bg-card/95 backdrop-blur lg:hidden">
             {nav.map((item) => (

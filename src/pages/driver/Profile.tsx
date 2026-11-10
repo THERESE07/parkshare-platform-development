@@ -109,7 +109,7 @@ export default function Profile() {
             <KeyRound className="size-5 text-muted-foreground" /> <span className="flex-1">Change password</span>
             <ChevronRight className="size-4 text-muted-foreground" />
           </button>
-          {editing === "password" && <PasswordForm onDone={() => setEditing(null)} />}
+          {editing === "password" && <PasswordForm email={profile?.email ?? user.email} onDone={() => setEditing(null)} />}
         </Card>
       </section>
 
@@ -240,7 +240,7 @@ function DetailsForm({ profile, onSaved }: { profile: ProfileT; onSaved: (p: Pro
   );
 }
 
-function PasswordForm({ onDone }: { onDone: () => void }) {
+function PasswordForm({ email, onDone }: { email: string; onDone: () => void }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [busy, setBusy] = useState(false);
@@ -258,6 +258,8 @@ function PasswordForm({ onDone }: { onDone: () => void }) {
     setError("");
     try {
       await meApi.changePassword(current, next);
+      // Changing the password signs out every device, this one included: sign straight back in.
+      await authApi.login(email, next);
       setOk(true);
       window.setTimeout(onDone, 1500);
     } catch (cause) {
@@ -267,7 +269,7 @@ function PasswordForm({ onDone }: { onDone: () => void }) {
     }
   }
 
-  if (ok) return <p className="p-4 text-sm text-success">Password changed.</p>;
+  if (ok) return <p className="p-4 text-sm text-success">Password changed. Your other devices have been signed out.</p>;
   return (
     <form onSubmit={save} className="space-y-3 p-4">
       <Field label="Current password" htmlFor="pwCurrent">

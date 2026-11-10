@@ -14,7 +14,7 @@ export default function DriverHome() {
   const { data } = useLoad(async () => {
     const [reservations, lots, events] = await Promise.all([
       reservationApi.listByUser(user.userId).catch(() => []),
-      parkingApi.listActive().catch(() => []),
+      parkingApi.list().then((lots) => lots.filter((l) => l.status?.toUpperCase() === "ACTIVE")).catch(() => []),
       eventApi.list().catch(() => []),
     ]);
     const names = await lotsById(reservations.map((r) => r.parkingLotId));

@@ -13,7 +13,7 @@ function safeNext(next: string | null): string | null {
 
 function AuthCard({ title, intro, children }: { title: string; intro: ReactNode; children: ReactNode }) {
   return (
-    <main className="grid min-h-[calc(100vh-72px)] place-items-center px-4 py-12">
+    <main className="grid place-items-center px-4 py-12">
       <section className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-xl shadow-black/5 sm:p-8">
         <Logo />
         <h1 className="mt-8 text-2xl font-bold">{title}</h1>
@@ -62,7 +62,7 @@ export function LoginPage() {
     <AuthCard title="Welcome back" intro="Sign in to find and reserve parking, or to manage your lots.">
       {params.get("expired") ? (
         <Alert tone="info" className="mt-5">
-          Your session ended (sessions last 24 hours). Please sign in again.
+          Your session has ended. Please sign in again.
         </Alert>
       ) : (
         next && (

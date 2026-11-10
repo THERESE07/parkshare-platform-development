@@ -12,7 +12,6 @@ import {
   WalletCards,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Logo } from "../components/ui";
 
 export default function LandingPage() {
   const roles = [
@@ -250,13 +249,6 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
-      <footer className="border-t border-border bg-card">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-7 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <Logo />
-          <p>Rwanda-first parking network · Kigali</p>
-          <p>ParkShare · 2026</p>
-        </div>
-      </footer>
     </div>
   );
 }

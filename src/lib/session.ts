@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AUTH_EVENT, authApi, type AuthResponse } from "../api";
+import { AUTH_EVENT, authApi, session, type AuthResponse } from "../api";
 
 /** The signed-in user; re-renders when someone signs in or out (or the token expires). */
 export function useSession(): AuthResponse | null {
@@ -10,6 +10,17 @@ export function useSession(): AuthResponse | null {
     return () => window.removeEventListener(AUTH_EVENT, sync);
   }, []);
   return user;
+}
+
+/** True while the login is being restored from the refresh token on app start. */
+export function useSessionRestoring(): boolean {
+  const [restoring, setRestoring] = useState(() => session.restoring());
+  useEffect(() => {
+    const sync = () => setRestoring(session.restoring());
+    window.addEventListener(AUTH_EVENT, sync);
+    return () => window.removeEventListener(AUTH_EVENT, sync);
+  }, []);
+  return restoring;
 }
 
 export type Role = "DRIVER" | "OPERATOR" | "ATTENDANT" | "EVENT_ORGANIZER" | "ADMIN";

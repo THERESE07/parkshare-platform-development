@@ -52,7 +52,7 @@ export default function ParkingDetail() {
             <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{lot.name}</h1>
             <p className="mt-1 flex items-center gap-1.5 text-muted-foreground">
               <MapPin className="size-4" />
-              {lot.address}, {lot.city}
+              {[lot.address, lot.district, lot.city].filter(Boolean).join(", ")}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               {rating !== null ? (
@@ -172,8 +172,10 @@ export default function ParkingDetail() {
           <Card className="p-5 lg:sticky lg:top-24">
             <div className="flex items-end justify-between">
               <div>
-                <p className="font-display text-3xl font-bold">{hourly ? formatRwf(hourly.amount) : "Standard rate"}</p>
-                <p className="text-sm text-muted-foreground">{hourly ? "per hour" : "set by ParkShare"}</p>
+                <p className="font-display text-2xl font-bold">
+                  {hourly ? `${formatRwf(hourly.amount)} per hour` : "Standard ParkShare rate"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">You'll see the exact total before you confirm.</p>
               </div>
               {daily && (
                 <div className="text-right text-sm text-muted-foreground">
@@ -201,7 +203,7 @@ export default function ParkingDetail() {
             </dl>
 
             <p className="mt-3 text-xs leading-5 text-muted-foreground">
-              You'll see the exact price from ParkShare before you confirm. {CANCEL_POLICY}
+              {CANCEL_POLICY}
             </p>
 
             {open ? (

@@ -34,9 +34,7 @@ export function LotCard({ lot, distance, className }: { lot: ParkingLot; distanc
           <h3 className="truncate font-sans font-semibold leading-tight tracking-normal">{lot.name}</h3>
           <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="size-3.5 shrink-0" />
-            <span className="truncate">
-              {lot.address}, {lot.city}
-            </span>
+            <span className="truncate">{[lot.address, lot.district, lot.city].filter(Boolean).join(", ")}</span>
           </p>
         </div>
         {distance != null ? (

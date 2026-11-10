@@ -1,56 +1,37 @@
 import { useEffect, useState } from "react";
 
-export type ThemeChoice = "light" | "dark" | "system";
+/** Light is the standard theme; dark is opt-in and remembered per browser. */
+export type Theme = "light" | "dark";
 const KEY = "ps_theme";
 const EVENT = "parkshare:theme";
 
-function read(): ThemeChoice {
+function read(): Theme {
   try {
-    const v = window.localStorage.getItem(KEY);
-    return v === "light" || v === "dark" ? v : "system";
+    return window.localStorage.getItem(KEY) === "dark" ? "dark" : "light";
   } catch {
-    return "system";
+    return "light";
   }
 }
 
-function prefersDark() {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-}
-
-export function applyTheme(choice: ThemeChoice = read()) {
-  const dark = choice === "dark" || (choice === "system" && prefersDark());
+export function applyTheme(theme: Theme = read()) {
+  const dark = theme === "dark";
   document.documentElement.classList.toggle("dark", dark);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0f1719" : "#176b67");
 }
 
 export function useTheme() {
-  const [choice, setChoice] = useState<ThemeChoice>(read);
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
+  const [theme, setTheme] = useState<Theme>(read);
 
   useEffect(() => {
-    const sync = () => {
-      setChoice(read());
-      setIsDark(document.documentElement.classList.contains("dark"));
-    };
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const onSystem = () => {
-      if (read() === "system") {
-        applyTheme("system");
-        sync();
-      }
-    };
+    const sync = () => setTheme(read());
     window.addEventListener(EVENT, sync);
-    media?.addEventListener("change", onSystem);
-    return () => {
-      window.removeEventListener(EVENT, sync);
-      media?.removeEventListener("change", onSystem);
-    };
+    return () => window.removeEventListener(EVENT, sync);
   }, []);
 
-  function set(next: ThemeChoice) {
+  function set(next: Theme) {
     try {
-      if (next === "system") window.localStorage.removeItem(KEY);
-      else window.localStorage.setItem(KEY, next);
+      if (next === "dark") window.localStorage.setItem(KEY, "dark");
+      else window.localStorage.removeItem(KEY);
     } catch {
       /* ignore */
     }
@@ -58,5 +39,5 @@ export function useTheme() {
     window.dispatchEvent(new Event(EVENT));
   }
 
-  return { choice, isDark, set };
+  return { theme, isDark: theme === "dark", set, toggle: () => set(theme === "dark" ? "light" : "dark") };
 }

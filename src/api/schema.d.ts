@@ -1220,6 +1220,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/password/reset": {
         parameters: {
             query?: never;
@@ -1246,6 +1262,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["forgot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logout"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6421,6 +6453,7 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+            district?: string;
         };
         ParkingFeatureRequestDto: {
             featureCode?: string;
@@ -6836,10 +6869,6 @@ export interface components {
             status?: string;
             role?: string;
         };
-        LoginRequestDto: {
-            email: string;
-            password: string;
-        };
         LoginResponseDto: {
             token?: string;
             tokenType?: string;
@@ -6849,6 +6878,15 @@ export interface components {
             firstName?: string;
             lastName?: string;
             roles?: string[];
+            refreshToken?: string;
+            /** Format: int64 */
+            expiresIn?: number;
+            /** Format: int64 */
+            refreshExpiresIn?: number;
+        };
+        LoginRequestDto: {
+            email: string;
+            password: string;
         };
         CancellationResult: {
             reservation?: components["schemas"]["ReservationResponseDto"];
@@ -7005,10 +7043,10 @@ export interface components {
             parent?: components["schemas"]["ApplicationContext"];
             id?: string;
             displayName?: string;
+            autowireCapableBeanFactory?: components["schemas"]["AutowireCapableBeanFactory"];
             applicationName?: string;
             /** Format: int64 */
             startupDate?: number;
-            autowireCapableBeanFactory?: components["schemas"]["AutowireCapableBeanFactory"];
             environment?: components["schemas"]["Environment"];
             /** Format: int32 */
             beanDefinitionCount?: number;
@@ -7140,7 +7178,6 @@ export interface components {
             jspPropertyGroups?: components["schemas"]["JspPropertyGroupDescriptor"][];
         };
         JspPropertyGroupDescriptor: {
-            deferredSyntaxAllowedAsLiteral?: string;
             elIgnored?: string;
             errorOnELNotFound?: string;
             pageEncoding?: string;
@@ -7150,6 +7187,7 @@ export interface components {
             includeCodas?: string[];
             trimDirectiveWhitespaces?: string;
             errorOnUndeclaredNamespace?: string;
+            deferredSyntaxAllowedAsLiteral?: string;
             defaultContentType?: string;
             buffer?: string;
             urlPatterns?: string[];
@@ -10866,6 +10904,32 @@ export interface operations {
             };
         };
     };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LoginResponseDto"];
+                };
+            };
+        };
+    };
     reset: {
         parameters: {
             query?: never;
@@ -10919,6 +10983,30 @@ export interface operations {
                         [key: string]: string;
                     };
                 };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

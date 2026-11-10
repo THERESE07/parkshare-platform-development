@@ -360,31 +360,44 @@ function DetailsStep({
   );
 }
 
-/** Shows the server's quote exactly: total big, then the lines and the note (guide §9). */
+const num = (n: number | null | undefined) =>
+  new Intl.NumberFormat("en-RW", { maximumFractionDigits: 2 }).format(Number(n ?? 0));
+
+/**
+ * Shows the server's quote exactly (guide §9): each line as
+ * "{minutes/60} h × {hourlyRate} RWF/h = {amount} RWF", then the total, then the API's note.
+ */
 function PriceSummary({ quote, error, pending }: { quote: PriceQuote | null; error: string; pending: boolean }) {
   return (
     <Card className="p-4">
-      <div className="flex items-end justify-between gap-3">
-        <span className="text-sm font-semibold">Total to pay</span>
+      {quote && (
+        <ul className="space-y-1.5 border-b border-border pb-3 text-sm">
+          {(quote.lines ?? []).map((line, i) => (
+            <li key={i} className="flex flex-wrap justify-between gap-x-3">
+              <span className="text-muted-foreground">{line.label}</span>
+              <span className="tabular-nums">
+                {num((line.minutes ?? 0) / 60)} h × {num(line.hourlyRate)} RWF/h = <strong>{formatRwf(line.amount)}</strong>
+              </span>
+            </li>
+          ))}
+          {quote.dailyCapDiscount ? (
+            <li className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Daily cap</span>
+              <span className="tabular-nums text-success">−{formatRwf(quote.dailyCapDiscount)}</span>
+            </li>
+          ) : null}
+        </ul>
+      )}
+      <div className={cn("flex items-end justify-between gap-3", quote && "pt-3")}>
+        <span className="text-sm font-semibold">Total</span>
         <span className="font-display text-3xl font-bold tabular-nums">
           {quote ? formatRwf(quote.total) : error ? "—" : pending ? <LoaderCircle className="size-6 animate-spin text-muted-foreground" /> : "—"}
         </span>
       </div>
-      {quote && (
-        <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
-          {(quote.lines ?? []).map((line, i) => (
-            <div key={i} className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">{line.label}</dt>
-              <dd className="font-medium tabular-nums">{formatRwf(line.amount)}</dd>
-            </div>
-          ))}
-          {quote.dailyCapDiscount ? (
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Daily cap</dt>
-              <dd className="font-medium tabular-nums text-success">−{formatRwf(quote.dailyCapDiscount)}</dd>
-            </div>
-          ) : null}
-        </dl>
+      {quote?.vatIncluded && (
+        <p className="mt-1 text-right text-xs text-muted-foreground tabular-nums">
+          Includes {formatRwf(quote.vatAmount)} VAT
+        </p>
       )}
       {quote?.note && <p className="mt-2 text-xs text-muted-foreground">{quote.note}</p>}
       {error && <p className="mt-2 whitespace-pre-line text-xs text-destructive">{error}</p>}

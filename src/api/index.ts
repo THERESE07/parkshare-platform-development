@@ -3,9 +3,9 @@
  * (src/api/schema.d.ts, regenerate with `pnpm api:types`), never by hand.
  */
 import type { components } from "./schema";
-import { api, json, query, session } from "./client";
+import { api, json, query, session, type LoginResult } from "./client";
 
-export { ApiError, AUTH_EVENT, WAKING_EVENT, isServerWaking, session } from "./client";
+export { ApiError, AUTH_EVENT, WAKING_EVENT, isServerWaking, restoreSession, session } from "./client";
 
 type S = components["schemas"];
 /**
@@ -63,14 +63,19 @@ export const RWANDA_DISTRICTS = [
 export const authApi = {
   async login(email: string, password: string): Promise<AuthResponse> {
     const result = await api<AuthResponse>("/api/auth/login", json("POST", { email, password }));
-    session.set(result.token, result);
+    session.save(result as unknown as LoginResult);
     return result;
   },
   register(input: RegisterRequest) {
     return api<Dto<S["RegisterResponseDto"]>>("/api/auth/register", json("POST", input));
   },
   currentUser: () => session.user<AuthResponse>(),
-  logout: () => session.set(null),
+  /** Revokes the refresh token on the server, then forgets the session locally. */
+  async logout() {
+    const refreshToken = session.refreshToken();
+    session.clear();
+    if (refreshToken) await api("/api/auth/logout", json("POST", { refreshToken })).catch(() => undefined);
+  },
   forgotPassword: (identifier: string) => api("/api/auth/password/forgot", json("POST", { identifier })),
   resetPassword: (identifier: string, code: string, newPassword: string) =>
     api("/api/auth/password/reset", json("POST", { identifier, code, newPassword })),
@@ -80,8 +85,7 @@ export const meApi = {
   get: () => api<Profile>("/api/me"),
   async update(changes: { firstName?: string; lastName?: string; phone?: string }): Promise<Profile> {
     const profile = await api<Profile>("/api/me", json("PATCH", changes));
-    const user = authApi.currentUser();
-    if (user) session.set(session.token(), { ...user, firstName: profile.firstName, lastName: profile.lastName });
+    session.updateUser({ firstName: profile.firstName, lastName: profile.lastName });
     return profile;
   },
   changePassword: (currentPassword: string, newPassword: string) =>
@@ -95,8 +99,8 @@ export const meApi = {
 /* ---------- Parking ---------- */
 
 export const parkingApi = {
-  /** Approved lots only: what drivers should see (guide §9). */
-  listActive: () => api<ParkingLot[]>("/api/parking-lots/status/ACTIVE"),
+  /** Drivers only receive approved lots; operators also see their own pending lots (guide §9). */
+  list: () => api<ParkingLot[]>("/api/parking-lots"),
   listByStatus: (status: string) => api<ParkingLot[]>(`/api/parking-lots/status/${status}`),
   get: (id: number) => api<ParkingLot>(`/api/parking-lots/${id}`),
   listByOperator: (operatorId: number) => api<ParkingLot[]>(`/api/parking-lots/operator/${operatorId}`),

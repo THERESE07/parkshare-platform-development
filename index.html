@@ -7,11 +7,9 @@
     <meta name="description" content="ParkShare — know your parking, reserve it, arrive with confidence." />
     <title>ParkShare — Trusted parking in Rwanda</title>
     <script>
-      // Apply the saved theme before first paint (no flash of the wrong theme).
+      // Light is the default; apply dark before first paint only if the user chose it.
       try {
-        var t = localStorage.getItem("ps_theme");
-        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches))
-          document.documentElement.classList.add("dark");
+        if (localStorage.getItem("ps_theme") === "dark") document.documentElement.classList.add("dark");
       } catch (e) {}
     </script>
   </head>
